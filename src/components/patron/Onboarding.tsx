@@ -9,26 +9,24 @@ import { TermsSheet } from "./TermsSheet";
 
 export function Onboarding({ onDone }: { onDone: (p: Profile) => void }) {
   const [name, setName] = useState("");
-  const [age21, setAge21] = useState(false);
-  const [age25, setAge25] = useState(false);
-  const [location, setLocation] = useState(false);
-  const [terms, setTerms] = useState(false);
+  const [agreed, setAgreed] = useState(false);
   const [marketing, setMarketing] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
-  const ready = name.trim().length >= 2 && age21 && location && terms;
+  const ready = name.trim().length >= 2 && agreed;
 
   async function submit() {
     setBusy(true);
     setError("");
     const { data, error } = await supabase().rpc("complete_onboarding", {
       p_display_name: name.trim(),
-      p_age_21: age21,
-      p_age_25: age25,
-      p_location_consent: location,
-      p_terms_accepted: terms,
+      // One combined statement, recorded against each requirement it covers.
+      p_age_21: agreed,
+      p_age_25: false, // confirmed later under More > Me, only needed for spirits rewards
+      p_location_consent: agreed,
+      p_terms_accepted: agreed,
       p_marketing: marketing,
       p_terms_version: TERMS_VERSION,
     });
@@ -52,25 +50,16 @@ export function Onboarding({ onDone }: { onDone: (p: Profile) => void }) {
       </Field>
 
       <div className="flex flex-col gap-3">
-        <Check checked={age21} onChange={setAge21} required>
-          I am 21 years or older.
-        </Check>
-        <Check checked={age25} onChange={setAge25}>
-          I am 25 or older. Needed to win rewards that include spirits.
-        </Check>
-        <Check checked={location} onChange={setLocation} required>
-          I consent to location verification. My location is checked only to confirm I&apos;m at the venue,
-          and my coordinates are never stored.
-        </Check>
-        <Check checked={terms} onChange={setTerms} required>
-          I accept the{" "}
+        <Check checked={agreed} onChange={setAgreed} required>
+          I&apos;m 21 or older, I agree to a quick location check to confirm I&apos;m at the venue (my
+          coordinates are never stored), and I accept the{" "}
           <button type="button" className="font-semibold text-brand underline" onClick={() => setShowTerms(true)}>
             Terms and privacy notice
           </button>
           .
         </Check>
         <Check checked={marketing} onChange={setMarketing}>
-          Send me offers from this venue and partner brands.
+          Send me club offers during the match.
         </Check>
       </div>
 
