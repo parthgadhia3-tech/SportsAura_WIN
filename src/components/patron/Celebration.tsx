@@ -14,10 +14,12 @@ const SPARKS = Array.from({ length: 22 }, (_, i) => {
 export function Celebration({
   points,
   coupon,
+  extra = 0,
   onClose,
 }: {
   points: number;
   coupon: WalletCoupon | null;
+  extra?: number;
   onClose: () => void;
 }) {
   const reduce = useReducedMotion();
@@ -97,6 +99,12 @@ export function Celebration({
       ) : (
         <p className="mt-6 max-w-xs text-center text-[17px] text-ink/75">
           Points added to your score. Keep going to climb the leaderboard.
+        </p>
+      )}
+
+      {coupon && extra > 0 && (
+        <p className="mt-4 text-center text-[17px] font-semibold text-brand-2">
+          +{extra} more {extra === 1 ? "reward" : "rewards"} saved to your wallet
         </p>
       )}
 

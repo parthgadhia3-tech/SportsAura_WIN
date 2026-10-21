@@ -5,7 +5,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
 import { friendlyError } from "@/lib/copy";
 import { DEFAULT_THEME, themeVars } from "@/lib/theme";
-import type { Banner, Bucket, BgType, CodeMode, Match, Theme, Venue } from "@/lib/types";
+import type { Banner, Bucket, BgType, CodeMode, Match, RewardRule, RewardSet, Theme, Venue } from "@/lib/types";
 
 // ---------------------------------------------------------------- helpers
 function useStatus() {
@@ -46,16 +46,20 @@ export function MatchesPanel() {
   const [sport, setSport] = useState("cricket");
   const [startsAt, setStartsAt] = useState("");
   const [themeId, setThemeId] = useState("");
+  const [setId, setSetId] = useState("");
+  const [sets, setSets] = useState<RewardSet[]>([]);
   const s = useStatus();
 
   const load = useCallback(async () => {
     const sb = supabase();
-    const [{ data: m }, { data: t }] = await Promise.all([
+    const [{ data: m }, { data: t }, { data: rs }] = await Promise.all([
       sb.from("matches").select("*").order("starts_at", { ascending: false }).limit(50),
       sb.from("themes").select("*").order("name"),
+      sb.from("reward_sets").select("*").eq("is_active", true).order("code"),
     ]);
     setMatches((m as Match[]) ?? []);
     setThemes((t as Theme[]) ?? []);
+    setSets((rs as RewardSet[]) ?? []);
   }, []);
   useEffect(() => {
     load();
@@ -68,6 +72,7 @@ export function MatchesPanel() {
       sport,
       starts_at: fromLocal(startsAt) ?? new Date().toISOString(),
       theme_id: themeId || null,
+      reward_set_id: setId || null,
     });
     if (error) return s.fail(error);
     setTitle("");
@@ -101,6 +106,13 @@ export function MatchesPanel() {
               {themes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
           </label>
+          <label>
+            Reward set (every right answer wins a coupon)
+            <select value={setId} onChange={(e) => setSetId(e.target.value)}>
+              <option value="">None, only per-question rewards</option>
+              {sets.map((x) => <option key={x.id} value={x.id}>Set {x.code}: {x.name}</option>)}
+            </select>
+          </label>
           <button className="btn btn-dark">Create match</button>
         </form>
       </Card>
@@ -109,7 +121,7 @@ export function MatchesPanel() {
         <Card title="Matches">
           <table className="w-full text-sm">
             <thead className="text-left text-[#5b6865]">
-              <tr><th className="py-1">Match</th><th>Starts</th><th>Theme</th><th>Status</th></tr>
+              <tr><th className="py-1">Match</th><th>Starts</th><th>Theme</th><th>Reward set</th><th>Status</th></tr>
             </thead>
             <tbody>
               {matches.map((m) => (
@@ -120,6 +132,12 @@ export function MatchesPanel() {
                     <select value={m.theme_id ?? ""} onChange={(e) => update(m.id, { theme_id: e.target.value || null })} className="!w-40 !py-1">
                       <option value="">Venue default</option>
                       {themes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </td>
+                  <td>
+                    <select value={m.reward_set_id ?? ""} onChange={(e) => update(m.id, { reward_set_id: e.target.value || null })} className="!w-36 !py-1">
+                      <option value="">None</option>
+                      {sets.map((x) => <option key={x.id} value={x.id}>Set {x.code}</option>)}
                     </select>
                   </td>
                   <td>
@@ -154,25 +172,73 @@ type BucketForm = {
   total_quantity: string;
   valid_until: string;
   is_active: boolean;
+  set_id: string;
+  rule: RewardRule;
+  rule_n: string;
 };
 const EMPTY_BUCKET: BucketForm = {
   brand_name: "", logo_url: "", title: "", description: "", terms: "", kind: "none",
   code_mode: "unique", static_code: "", affiliate_url: "", total_quantity: "", valid_until: "", is_active: true,
+  set_id: "", rule: "random", rule_n: "10",
 };
 
+const RULE_LABEL: Record<RewardRule, string> = {
+  random: "Random",
+  first_correct: "First right answer",
+  every_n_correct: "Every N right answers",
+};
+const ruleText = (b: Pick<Bucket, "rule" | "rule_n">) =>
+  b.rule === "every_n_correct" ? `Every ${b.rule_n} right answers` : RULE_LABEL[b.rule ?? "random"];
+
 export function RewardsPanel() {
-  const [buckets, setBuckets] = useState<(Bucket & { clicks?: number })[]>([]);
+  const [buckets, setBuckets] = useState<Bucket[]>([]);
+  const [sets, setSets] = useState<RewardSet[]>([]);
   const [form, setForm] = useState<BucketForm>(EMPTY_BUCKET);
+  const [newSet, setNewSet] = useState({ code: "", name: "" });
+  const [filter, setFilter] = useState<string>("all");
   const s = useStatus();
   const set = <K extends keyof BucketForm>(k: K, v: BucketForm[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   const load = useCallback(async () => {
-    const { data } = await supabase().from("coupon_buckets").select("*").order("created_at", { ascending: false });
-    setBuckets((data as Bucket[]) ?? []);
+    const sb = supabase();
+    const [{ data: b }, { data: rs }] = await Promise.all([
+      sb.from("coupon_buckets").select("*").order("created_at", { ascending: false }),
+      sb.from("reward_sets").select("*").order("code"),
+    ]);
+    setBuckets((b as Bucket[]) ?? []);
+    setSets((rs as RewardSet[]) ?? []);
   }, []);
   useEffect(() => {
     load();
   }, [load]);
+
+  const setById = Object.fromEntries(sets.map((x) => [x.id, x]));
+  const label = (b: Bucket) => (b.set_id && setById[b.set_id] ? `${setById[b.set_id].code}${b.set_position ?? ""}` : "");
+  const nextLabel = form.set_id && setById[form.set_id]
+    ? `${setById[form.set_id].code}${Math.max(0, ...buckets.filter((b) => b.set_id === form.set_id).map((b) => b.set_position ?? 0)) + 1}`
+    : "";
+
+  async function createSet(e: React.FormEvent) {
+    e.preventDefault();
+    const code = newSet.code.trim().toUpperCase();
+    const { data, error } = await supabase()
+      .from("reward_sets")
+      .insert({ code, name: newSet.name.trim() || `Set ${code}` })
+      .select("*")
+      .single();
+    if (error) return s.fail(error.message.includes("code") ? "Set code must be unique: 1 to 6 capital letters or numbers, starting with a letter (e.g. Z)." : error);
+    setNewSet({ code: "", name: "" });
+    s.ok(`Set ${code} created. Add its coupons below.`);
+    await load();
+    setForm({ ...EMPTY_BUCKET, set_id: (data as RewardSet).id });
+    setFilter((data as RewardSet).id);
+  }
+
+  async function toggleSet(x: RewardSet) {
+    const { error } = await supabase().from("reward_sets").update({ is_active: !x.is_active }).eq("id", x.id);
+    if (error) return s.fail(error);
+    load();
+  }
 
   async function edit(b: Bucket) {
     const { data: sec } = await supabase().from("coupon_bucket_secrets").select("*").eq("bucket_id", b.id).maybeSingle();
@@ -190,13 +256,17 @@ export function RewardsPanel() {
       total_quantity: b.total_quantity?.toString() ?? "",
       valid_until: toLocal(b.valid_until),
       is_active: b.is_active,
+      set_id: b.set_id ?? "",
+      rule: b.rule ?? "random",
+      rule_n: b.rule_n?.toString() ?? "10",
     });
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
+  async function save(addAnother: boolean) {
+    if (!form.brand_name.trim() || !form.title.trim()) return s.fail("Add a brand name and a reward title.");
     if (form.code_mode === "static" && !form.static_code.trim()) return s.fail("Add the promo code, or pick another code type.");
+    if (form.set_id && form.rule === "every_n_correct" && !(Number(form.rule_n) >= 2)) return s.fail("Every N right answers needs N of 2 or more.");
     const row = {
       brand_name: form.brand_name.trim(),
       logo_url: form.logo_url.trim() || null,
@@ -209,6 +279,9 @@ export function RewardsPanel() {
       total_quantity: form.total_quantity ? Number(form.total_quantity) : null,
       valid_until: fromLocal(form.valid_until),
       is_active: form.is_active,
+      set_id: form.set_id || null,
+      rule: form.set_id ? form.rule : "random",
+      rule_n: form.set_id && form.rule === "every_n_correct" ? Number(form.rule_n) : null,
     };
     const sb = supabase();
     let id = form.id;
@@ -226,71 +299,153 @@ export function RewardsPanel() {
       static_code: form.code_mode === "static" ? form.static_code.trim() : null,
     });
     if (secErr) return s.fail(secErr);
-    setForm(EMPTY_BUCKET);
-    s.ok("Reward bucket saved.");
+    // "Save and add another" keeps brand, set and settings so a set of 20 is quick to fill.
+    setForm(addAnother ? { ...form, id: undefined, title: "", description: "", static_code: "", rule: "random" } : { ...EMPTY_BUCKET, set_id: form.set_id });
+    s.ok(addAnother ? "Saved. Fill in the next coupon." : "Saved.");
     load();
   }
 
+  const shown = buckets
+    .filter((b) => filter === "all" || (filter === "none" ? !b.set_id : b.set_id === filter))
+    .sort((a, z) => (label(a) && label(z) ? (a.set_id === z.set_id ? (a.set_position ?? 0) - (z.set_position ?? 0) : label(a).localeCompare(label(z))) : label(a) ? -1 : label(z) ? 1 : 0));
+
   return (
-    <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
-      <Card title={form.id ? "Edit reward bucket" : "New reward bucket"} aside={form.id && <button className="btn btn-line" onClick={() => setForm(EMPTY_BUCKET)}>New instead</button>}>
-        <form onSubmit={save} className="flex flex-col gap-3">
-          <label>Brand name<input required value={form.brand_name} onChange={(e) => set("brand_name", e.target.value)} /></label>
-          <label>Logo URL (https)<input type="url" pattern="https://.*" value={form.logo_url} onChange={(e) => set("logo_url", e.target.value)} /></label>
-          <label>Reward title<input required value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="20% off your food bill" /></label>
-          <label>Description<input value={form.description} onChange={(e) => set("description", e.target.value)} /></label>
-          <label>Terms<textarea rows={2} value={form.terms} onChange={(e) => set("terms", e.target.value)} /></label>
-          <label>
-            Contains alcohol?
-            <select value={form.kind} onChange={(e) => set("kind", e.target.value as BucketForm["kind"])}>
-              <option value="none">No alcohol</option>
-              <option value="beer">Beer or wine (21+)</option>
-              <option value="spirits">Spirits (25+ only)</option>
-            </select>
-          </label>
-          <label>
-            Code type
-            <select value={form.code_mode} onChange={(e) => set("code_mode", e.target.value as CodeMode)}>
-              <option value="unique">Unique code per winner (venue redeems it)</option>
-              <option value="static">Same promo code for everyone (brand code)</option>
-              <option value="none">No code (link only)</option>
-            </select>
-          </label>
-          {form.code_mode === "static" && (
-            <label>Promo code<input value={form.static_code} onChange={(e) => set("static_code", e.target.value)} /></label>
-          )}
-          <label>
-            Affiliate or brand link (https)
-            <input type="url" pattern="https://.*" value={form.affiliate_url} onChange={(e) => set("affiliate_url", e.target.value)} placeholder="Leave empty for in-venue rewards" />
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            <label>Quantity<input type="number" min={1} value={form.total_quantity} onChange={(e) => set("total_quantity", e.target.value)} placeholder="Unlimited" /></label>
-            <label>Valid until<input type="datetime-local" value={form.valid_until} onChange={(e) => set("valid_until", e.target.value)} /></label>
+    <div className="flex flex-col gap-6">
+      {s.node}
+      <Card title="Reward sets">
+        <p className="mb-3 text-sm text-[#5b6865]">
+          A set is a numbered list of coupons (Z1, Z2, ...). Attach it to a match in the Matches tab and every right answer
+          wins one coupon automatically: event coupons when their rule fires, otherwise a random one.
+        </p>
+        <div className="flex flex-wrap items-start gap-4">
+          <form onSubmit={createSet} className="flex items-end gap-2">
+            <label className="!w-24">Code<input required maxLength={6} value={newSet.code} onChange={(e) => setNewSet({ ...newSet, code: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "") })} placeholder="Z" /></label>
+            <label className="!w-56">Name<input value={newSet.name} onChange={(e) => setNewSet({ ...newSet, name: e.target.value })} placeholder="IPL weekend offers" /></label>
+            <button className="btn btn-dark">Create set</button>
+          </form>
+          <div className="flex flex-wrap gap-2">
+            {sets.map((x) => {
+              const items = buckets.filter((b) => b.set_id === x.id);
+              const issued = items.reduce((n, b) => n + b.issued_count, 0);
+              const events = items.filter((b) => b.rule !== "random").length;
+              return (
+                <div key={x.id} className={`rounded-lg border px-3 py-2 text-sm ${x.is_active ? "border-[#0f7a5c] bg-emerald-50" : "border-[#d8dedb] bg-white opacity-60"}`}>
+                  <p className="font-bold">Set {x.code} <span className="font-normal text-[#5b6865]">{x.name}</span></p>
+                  <p className="text-[#3b4745]">{items.length} coupons, {events} event, {issued} given out</p>
+                  <div className="mt-1 flex gap-2">
+                    <button className="text-xs font-semibold underline" onClick={() => { setFilter(x.id); setForm({ ...EMPTY_BUCKET, set_id: x.id }); }}>Add coupons</button>
+                    <button className="text-xs font-semibold underline" onClick={() => toggleSet(x)}>{x.is_active ? "Pause" : "Activate"}</button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-          <label className="!flex items-center gap-2">
-            <input type="checkbox" className="!w-auto" checked={form.is_active} onChange={(e) => set("is_active", e.target.checked)} />
-            Active
-          </label>
-          <button className="btn btn-dark">Save bucket</button>
-        </form>
+        </div>
       </Card>
-      <div className="flex flex-col gap-3">
-        {s.node}
-        <Card title="Reward buckets">
+
+      <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
+        <Card
+          title={form.id ? `Edit coupon ${form.set_id ? "" : "bucket"}` : nextLabel ? `New coupon ${nextLabel}` : "New reward bucket"}
+          aside={form.id && <button className="btn btn-line" onClick={() => setForm({ ...EMPTY_BUCKET, set_id: form.set_id })}>New instead</button>}
+        >
+          <form onSubmit={(e) => { e.preventDefault(); save(false); }} className="flex flex-col gap-3">
+            <label>
+              Reward set
+              <select value={form.set_id} onChange={(e) => set("set_id", e.target.value)}>
+                <option value="">None (single bonus reward for questions)</option>
+                {sets.map((x) => <option key={x.id} value={x.id}>Set {x.code}: {x.name}</option>)}
+              </select>
+            </label>
+            {form.set_id && (
+              <div className="rounded-lg bg-[#f1f5f3] p-3">
+                <label>
+                  Give out when
+                  <select value={form.rule} onChange={(e) => set("rule", e.target.value as RewardRule)}>
+                    <option value="random">Random (any right answer)</option>
+                    <option value="first_correct">Player&apos;s first right answer of the match</option>
+                    <option value="every_n_correct">Every N right answers (per player, per match)</option>
+                  </select>
+                </label>
+                {form.rule === "every_n_correct" && (
+                  <label className="mt-2">N<input type="number" min={2} max={500} value={form.rule_n} onChange={(e) => set("rule_n", e.target.value)} /></label>
+                )}
+              </div>
+            )}
+            <label>Brand name<input required value={form.brand_name} onChange={(e) => set("brand_name", e.target.value)} /></label>
+            <label>Logo URL (https)<input type="url" pattern="https://.*" value={form.logo_url} onChange={(e) => set("logo_url", e.target.value)} /></label>
+            <label>Reward title<input required value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="20% off your food bill" /></label>
+            <label>Description<input value={form.description} onChange={(e) => set("description", e.target.value)} /></label>
+            <label>Terms<textarea rows={2} value={form.terms} onChange={(e) => set("terms", e.target.value)} /></label>
+            <label>
+              Contains alcohol?
+              <select value={form.kind} onChange={(e) => set("kind", e.target.value as BucketForm["kind"])}>
+                <option value="none">No alcohol</option>
+                <option value="beer">Beer or wine (21+)</option>
+                <option value="spirits">Spirits (25+ only)</option>
+              </select>
+            </label>
+            <label>
+              Code type
+              <select value={form.code_mode} onChange={(e) => set("code_mode", e.target.value as CodeMode)}>
+                <option value="unique">Unique code per winner (venue redeems it)</option>
+                <option value="static">Same promo code for everyone (brand code)</option>
+                <option value="none">No code (link only)</option>
+              </select>
+            </label>
+            {form.code_mode === "static" && (
+              <label>Promo code<input value={form.static_code} onChange={(e) => set("static_code", e.target.value)} /></label>
+            )}
+            <label>
+              Affiliate or brand link (https)
+              <input type="url" pattern="https://.*" value={form.affiliate_url} onChange={(e) => set("affiliate_url", e.target.value)} placeholder="Leave empty for in-venue rewards" />
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label>Quantity<input type="number" min={1} value={form.total_quantity} onChange={(e) => set("total_quantity", e.target.value)} placeholder="Unlimited" /></label>
+              <label>Valid until<input type="datetime-local" value={form.valid_until} onChange={(e) => set("valid_until", e.target.value)} /></label>
+            </div>
+            <label className="!flex items-center gap-2">
+              <input type="checkbox" className="!w-auto" checked={form.is_active} onChange={(e) => set("is_active", e.target.checked)} />
+              Active
+            </label>
+            <div className="flex gap-2">
+              <button className="btn btn-dark flex-1">Save</button>
+              {!form.id && (
+                <button type="button" className="btn btn-line flex-1" onClick={() => save(true)}>
+                  Save and add another
+                </button>
+              )}
+            </div>
+          </form>
+        </Card>
+
+        <Card
+          title="Coupons"
+          aside={
+            <select className="!w-48" value={filter} onChange={(e) => setFilter(e.target.value)}>
+              <option value="all">All coupons</option>
+              {sets.map((x) => <option key={x.id} value={x.id}>Set {x.code}</option>)}
+              <option value="none">Not in a set</option>
+            </select>
+          }
+        >
           <table className="w-full text-sm">
             <thead className="text-left text-[#5b6865]">
-              <tr><th className="py-1">Reward</th><th>Type</th><th>Issued</th><th>Status</th><th /></tr>
+              <tr><th className="py-1">#</th><th>Reward</th><th>Given out when</th><th>Issued</th><th>Status</th><th /></tr>
             </thead>
             <tbody>
-              {buckets.map((b) => (
+              {shown.map((b) => (
                 <tr key={b.id} className="border-t border-[#eef1ef]">
-                  <td className="py-2"><span className="font-semibold">{b.title}</span><br /><span className="text-[#5b6865]">{b.brand_name}</span></td>
-                  <td>{b.min_age === 25 ? "Spirits 25+" : b.is_alcohol ? "Beer/wine 21+" : "Non-alcohol"}{b.has_link ? ", link" : ""}</td>
+                  <td className="py-2 font-bold">{label(b) || "–"}</td>
+                  <td><span className="font-semibold">{b.title}</span><br /><span className="text-[#5b6865]">{b.brand_name}{b.min_age === 25 ? ", spirits 25+" : b.is_alcohol ? ", beer/wine 21+" : ""}</span></td>
+                  <td>{b.set_id ? <span className={b.rule === "random" ? "" : "font-semibold text-[#0f7a5c]"}>{ruleText(b)}</span> : "Question bonus"}</td>
                   <td className="tabular">{b.issued_count}{b.total_quantity ? ` / ${b.total_quantity}` : ""}</td>
                   <td>{b.is_active ? "Active" : "Off"}</td>
                   <td className="text-right"><button className="btn btn-line !py-1" onClick={() => edit(b)}>Edit</button></td>
                 </tr>
               ))}
+              {shown.length === 0 && (
+                <tr><td colSpan={6} className="py-6 text-center text-[#5b6865]">No coupons here yet.</td></tr>
+              )}
             </tbody>
           </table>
         </Card>

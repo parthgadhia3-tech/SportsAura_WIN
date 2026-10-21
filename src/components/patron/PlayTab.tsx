@@ -83,7 +83,7 @@ export function PlayTab({
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Record<string, AnswerRow>>({});
   const [buckets, setBuckets] = useState<Record<string, BucketLite>>({});
-  const [celebrate, setCelebrate] = useState<{ points: number; coupon: WalletCoupon | null; qid: string } | null>(null);
+  const [celebrate, setCelebrate] = useState<{ points: number; coupon: WalletCoupon | null; extra: number; qid: string } | null>(null);
   const [error, setError] = useState("");
   const [sending, setSending] = useState<string | null>(null);
   const loadingRef = useRef(false);
@@ -176,10 +176,14 @@ export function PlayTab({
     (async () => {
       const { data } = await supabase()
         .from("user_coupons")
-        .select(`id, code, issued_at, expires_at, redeemed_at, question_id, coupon_buckets(${BUCKET_PUBLIC_COLUMNS})`)
-        .eq("question_id", win.id)
-        .maybeSingle();
-      setCelebrate({ points: answers[win.id].points_awarded, coupon: (data as WalletCoupon | null) ?? null, qid: win.id });
+        .select(`id, code, issued_at, expires_at, redeemed_at, question_id, coupon_buckets(${BUCKET_PUBLIC_COLUMNS}, set_id)`)
+        .eq("question_id", win.id);
+      type Won = WalletCoupon & { coupon_buckets: { set_id: string | null } };
+      // Show the reward-set coupon first; any bonus is mentioned as "+N more".
+      const won = ((data as unknown as Won[] | null) ?? []).sort(
+        (a, z) => Number(Boolean(z.coupon_buckets.set_id)) - Number(Boolean(a.coupon_buckets.set_id)),
+      );
+      setCelebrate({ points: answers[win.id].points_awarded, coupon: won[0] ?? null, extra: Math.max(won.length - 1, 0), qid: win.id });
       onPointsChanged();
     })();
   }, [questions, answers, celebrate, onPointsChanged]);
@@ -216,6 +220,7 @@ export function PlayTab({
           <QuestionCard
             key={card.id + card.status}
             q={card}
+            setActive={Boolean(match.reward_set_id)}
             now={now}
             mine={answers[card.id]}
             bucket={card.coupon_bucket_id ? buckets[card.coupon_bucket_id] : undefined}
@@ -272,6 +277,7 @@ export function PlayTab({
           <Celebration
             points={celebrate.points}
             coupon={celebrate.coupon}
+            extra={celebrate.extra}
             onClose={() => {
               markSeen(celebrate.qid);
               setCelebrate(null);
@@ -288,6 +294,7 @@ function QuestionCard({
   now,
   mine,
   bucket,
+  setActive,
   sending,
   onAnswer,
 }: {
@@ -295,6 +302,7 @@ function QuestionCard({
   now: number;
   mine?: AnswerRow;
   bucket?: BucketLite;
+  setActive?: boolean;
   sending: boolean;
   onAnswer: (i: number) => void;
 }) {
@@ -319,7 +327,7 @@ function QuestionCard({
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="font-display text-lg font-semibold text-brand-2">
-            {q.points} points{bucket ? ` + ${bucket.title}` : ""}
+            {q.points} points{bucket ? ` + ${bucket.title}` : setActive ? " + a reward if you're right" : ""}
           </p>
           <h2 className="mt-1 font-display text-[2.1rem] font-bold leading-[1.02]">{q.prompt}</h2>
           {bucket?.min_age === 25 && (

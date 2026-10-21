@@ -34,6 +34,27 @@ export function LiveConsole() {
   const [venueScope, setVenueScope] = useState("");
 
   const match = matches.find((m) => m.id === matchId);
+  const [rewardSet, setRewardSet] = useState<{ code: string } | null>(null);
+  const [stock, setStock] = useState<{ total_left: number; unlimited: boolean } | null>(null);
+  const setIdForMatch = match?.reward_set_id ?? null;
+
+  useEffect(() => {
+    if (!setIdForMatch) {
+      setRewardSet(null);
+      setStock(null);
+      return;
+    }
+    const sb = supabase();
+    const load = () => {
+      sb.from("reward_sets").select("code").eq("id", setIdForMatch).maybeSingle().then(({ data }) => setRewardSet(data));
+      sb.rpc("reward_set_stock", { p_set: setIdForMatch }).then(({ data }) =>
+        setStock(((data as { total_left: number; unlimited: boolean }[]) ?? [])[0] ?? null),
+      );
+    };
+    load();
+    const t = setInterval(load, 10000);
+    return () => clearInterval(t);
+  }, [setIdForMatch]);
 
   const loadMeta = useCallback(async () => {
     const sb = supabase();
@@ -222,10 +243,10 @@ export function LiveConsole() {
             </label>
           </div>
           <label>
-            Reward bucket
+            {match?.reward_set_id ? "Bonus reward (optional, on top of the set)" : "Reward bucket"}
             <select value={bucketId} onChange={(e) => setBucketId(e.target.value)}>
-              <option value="">Points only</option>
-              {buckets.map((b) => (
+              <option value="">{match?.reward_set_id ? "No bonus" : "Points only"}</option>
+              {buckets.filter((b) => !b.set_id).map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.brand_name}: {b.title}
                   {b.min_age === 25 ? " (25+ spirits)" : b.is_alcohol ? " (21+ beer/wine)" : ""}
@@ -259,6 +280,12 @@ export function LiveConsole() {
         )}
 
         <div>
+          {match?.reward_set_id && (
+            <p className="mb-3 rounded-lg bg-emerald-50 px-4 py-2 text-sm text-emerald-900">
+              Reward set {rewardSet?.code ?? ""} is on for this match: every right answer automatically wins a coupon from it.
+              {stock && !stock.unlimited ? ` ${stock.total_left} coupons left.` : ""}
+            </p>
+          )}
           <h2 className="mb-2 text-lg font-bold">On phones now</h2>
           {live.length === 0 && <p className="rounded-xl border border-dashed border-[#c9d0cd] p-6 text-center text-[#5b6865]">Nothing live. Push a question to start.</p>}
           <div className="flex flex-col gap-3">

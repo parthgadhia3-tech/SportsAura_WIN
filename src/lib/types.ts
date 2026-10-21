@@ -37,6 +37,16 @@ export interface Match {
   starts_at: string;
   status: MatchStatus;
   theme_id: string | null;
+  reward_set_id?: string | null;
+}
+
+export type RewardRule = "random" | "first_correct" | "every_n_correct";
+
+export interface RewardSet {
+  id: string;
+  code: string;
+  name: string;
+  is_active: boolean;
 }
 
 export interface Question {
@@ -71,6 +81,10 @@ export interface Bucket {
   valid_until: string | null;
   is_active: boolean;
   has_link: boolean;
+  set_id?: string | null;
+  set_position?: number | null;
+  rule?: RewardRule;
+  rule_n?: number | null;
 }
 
 export interface WalletCoupon {

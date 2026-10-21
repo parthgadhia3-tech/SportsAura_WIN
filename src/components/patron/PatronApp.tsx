@@ -131,7 +131,7 @@ export function PatronApp({ slug }: { slug: string }) {
       if (!v) return setVenue(null);
       const { data: m } = await sb
         .from("matches")
-        .select("id, title, sport, starts_at, status, theme_id")
+        .select("id, title, sport, starts_at, status, theme_id, reward_set_id")
         .eq("status", "live")
         .order("starts_at", { ascending: false })
         .limit(1)

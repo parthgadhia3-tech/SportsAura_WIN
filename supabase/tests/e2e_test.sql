@@ -325,4 +325,80 @@ do $$ begin
 end $$;
 reset role;
 
+
+-- =====================================================================
+-- Reward sets: Z2 on first right answer, Z6 every 10th, rest random
+-- =====================================================================
+set role authenticated;
+select t_as('22222222-0000-0000-0000-000000000001');
+insert into public.reward_sets (id, code, name) values ('00000000-0000-0000-0000-00000000aa01', 'Z', 'Test set Z');
+insert into public.matches (id, title, starts_at, status, reward_set_id)
+values ('00000000-0000-0000-0000-00000000cc02', 'Set match', now(), 'live', '00000000-0000-0000-0000-00000000aa01');
+-- Z1..Z6: Z2 = first_correct, Z6 = every 10, Z4 limited to 1, others random
+insert into public.coupon_buckets (brand_name, title, code_mode, set_id, rule, rule_n, total_quantity)
+select 'Brand', 'Z coupon ' || g, 'unique', '00000000-0000-0000-0000-00000000aa01',
+       case g when 2 then 'first_correct'::reward_rule when 6 then 'every_n_correct'::reward_rule else 'random'::reward_rule end,
+       case g when 6 then 10 end,
+       case g when 4 then 1 end
+  from generate_series(1, 6) g;
+do $$ begin
+  assert (select string_agg(set_position::text, ',' order by set_position) from public.coupon_buckets
+           where set_id = '00000000-0000-0000-0000-00000000aa01') = '1,2,3,4,5,6', 'auto positions 1..6';
+end $$;
+
+-- Esha checks in to the set match by PIN-free path (superuser shortcut)
+reset role;
+insert into public.player_sessions (user_id, venue_id, match_id, verification_method)
+values ('11111111-0000-0000-0000-000000000005', '00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-00000000cc02', 'qr'),
+       ('11111111-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-00000000cc02', 'gps');
+set role authenticated;
+
+-- 12 questions; Esha answers all right, Asha answers only the first one right
+do $$
+declare i int; qid uuid;
+begin
+  for i in 1..12 loop
+    perform set_config('request.jwt.claims', '{"sub":"22222222-0000-0000-0000-000000000001"}', false);
+    insert into public.questions (match_id, prompt, options) values ('00000000-0000-0000-0000-00000000cc02', 'Set q ' || i, '{Yes,No}')
+      returning id into qid;
+    perform push_question(qid);
+    perform set_config('request.jwt.claims', '{"sub":"11111111-0000-0000-0000-000000000005"}', false);
+    perform submit_answer(qid, 0::smallint);
+    perform set_config('request.jwt.claims', '{"sub":"11111111-0000-0000-0000-000000000001"}', false);
+    perform submit_answer(qid, case when i = 1 then 0 else 1 end::smallint);
+    perform set_config('request.jwt.claims', '{"sub":"22222222-0000-0000-0000-000000000001"}', false);
+    perform resolve_question(qid, 0::smallint);
+  end loop;
+end $$;
+
+reset role;
+do $$
+declare first_esha int; tenth_esha int; total_esha int; asha_first int; z4 int; wrong_answers int;
+begin
+  select b.set_position into first_esha from public.user_coupons uc join public.coupon_buckets b on b.id = uc.bucket_id
+    join public.questions q on q.id = uc.question_id
+   where uc.user_id = '11111111-0000-0000-0000-000000000005' and q.prompt = 'Set q 1';
+  select b.set_position into tenth_esha from public.user_coupons uc join public.coupon_buckets b on b.id = uc.bucket_id
+    join public.questions q on q.id = uc.question_id
+   where uc.user_id = '11111111-0000-0000-0000-000000000005' and q.prompt = 'Set q 10';
+  select count(*) into total_esha from public.user_coupons uc join public.coupon_buckets b on b.id = uc.bucket_id
+   where uc.user_id = '11111111-0000-0000-0000-000000000005' and b.set_id = '00000000-0000-0000-0000-00000000aa01';
+  select b.set_position into asha_first from public.user_coupons uc join public.coupon_buckets b on b.id = uc.bucket_id
+   where uc.user_id = '11111111-0000-0000-0000-000000000001' and b.set_id = '00000000-0000-0000-0000-00000000aa01';
+  select issued_count into z4 from public.coupon_buckets where set_id = '00000000-0000-0000-0000-00000000aa01' and set_position = 4;
+  select count(*) into wrong_answers from public.user_coupons uc join public.coupon_buckets b on b.id = uc.bucket_id
+   where uc.user_id = '11111111-0000-0000-0000-000000000001' and b.set_id = '00000000-0000-0000-0000-00000000aa01';
+  assert first_esha = 2, 'first right answer => Z2, got Z' || first_esha;
+  assert tenth_esha = 6, '10th right answer => Z6, got Z' || tenth_esha;
+  assert total_esha = 12, '100% distribution: 12 right answers => 12 coupons, got ' || total_esha;
+  assert asha_first = 2 and wrong_answers = 1, 'Asha: 1 right => only Z2';
+  assert z4 <= 1, 'Z4 quantity limit respected';
+  assert (select count(*) from public.user_coupons uc join public.coupon_buckets b on b.id = uc.bucket_id
+           join public.questions q on q.id = uc.question_id
+          where uc.user_id = '11111111-0000-0000-0000-000000000005' and b.set_id = '00000000-0000-0000-0000-00000000aa01'
+            and q.prompt not in ('Set q 1', 'Set q 10') and b.rule <> 'random') = 0,
+    'non-event answers come from the random pool';
+end $$;
+\echo REWARD_SETS_OK
+
 \echo ALL_TESTS_PASSED
