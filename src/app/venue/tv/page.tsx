@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { QRCodeSVG } from "qrcode.react";
 import { StaffGate } from "@/components/staff/StaffGate";
+import { supabase } from "@/lib/supabase";
 import { fmtCountdown, useLeaderboard, useLiveMatch, useVenue, useVenuePin, useVenueQr } from "@/components/staff/useVenueData";
 
 // Full-screen display for the bar's TV. Sign in once as the venue manager.
@@ -19,7 +20,23 @@ export default function TvPage() {
 
 function TvLoader({ fallbackVenue }: { fallbackVenue: string | null }) {
   const params = useSearchParams();
-  return <Tv venueId={params.get("venue") ?? fallbackVenue} />;
+  const fromUrl = params.get("venue") ?? fallbackVenue;
+  const [firstVenue, setFirstVenue] = useState<string | null>(null);
+
+  // Admins and Game Masters aren't tied to a venue: use the first active one.
+  useEffect(() => {
+    if (fromUrl) return;
+    supabase()
+      .from("venues")
+      .select("id")
+      .eq("is_active", true)
+      .order("name")
+      .limit(1)
+      .maybeSingle()
+      .then(({ data }) => setFirstVenue(data?.id ?? null));
+  }, [fromUrl]);
+
+  return <Tv venueId={fromUrl ?? firstVenue} />;
 }
 
 function Tv({ venueId }: { venueId: string | null }) {
