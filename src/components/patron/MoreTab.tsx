@@ -8,7 +8,15 @@ import { ErrorNote, GhostButton } from "./ui";
 import { TermsBody } from "./TermsSheet";
 import { MyRecord } from "./MyRecord";
 
-export function MoreTab({ profile, onProfile }: { profile: Profile; onProfile: (p: Profile) => void }) {
+export function MoreTab({
+  profile,
+  onProfile,
+  onReplayTour,
+}: {
+  profile: Profile;
+  onProfile: (p: Profile) => void;
+  onReplayTour: () => void;
+}) {
   const [section, setSection] = useState<"how" | "terms" | "account">("account");
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -58,6 +66,9 @@ export function MoreTab({ profile, onProfile }: { profile: Profile; onProfile: (
 
       {section === "how" && (
         <ol className="flex flex-col gap-5">
+          <li>
+            <GhostButton onClick={onReplayTour}>Watch the walkthrough again</GhostButton>
+          </li>
           {HOW_TO_PLAY.map((s, i) => (
             <li key={s.title} className="flex gap-4">
               <span className="tabular flex size-11 shrink-0 items-center justify-center rounded-full bg-brand font-display text-2xl font-bold text-on-brand">

@@ -1,5 +1,6 @@
 "use client";
 
+import { AnimatePresence } from "framer-motion";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
@@ -14,12 +15,29 @@ import { WalletTab } from "./WalletTab";
 import { OffersTab } from "./OffersTab";
 import { MoreTab } from "./MoreTab";
 import { Spinner } from "./ui";
+import { HowToPlayTour } from "./HowToPlayTour";
 
 type Tab = "play" | "ranks" | "wallet" | "offers" | "more";
 type Presence = "unknown" | "verify" | "ok";
 
 const HEARTBEAT_MS = 120_000;
 const QR_KEY = "md-qr-ticket";
+const tourKey = (userId: string) => `md-tour-seen-${userId}`;
+
+function tourSeen(userId: string): boolean {
+  try {
+    return localStorage.getItem(tourKey(userId)) === "1";
+  } catch {
+    return true; // storage blocked: don't nag every visit
+  }
+}
+function markTourSeen(userId: string) {
+  try {
+    localStorage.setItem(tourKey(userId), "1");
+  } catch {
+    /* ignore */
+  }
+}
 type Method = "gps" | "pin" | "qr";
 type QrTicket = { ticket: string; venueId: string; expiresAt: string };
 
@@ -60,6 +78,17 @@ export function PatronApp({ slug }: { slug: string }) {
   const [points, setPoints] = useState(0);
   const [tab, setTab] = useState<Tab>("play");
   const [qrExpired, setQrExpired] = useState(false);
+  const [showTour, setShowTour] = useState(false);
+
+  // First time this account plays on this phone: show the walkthrough.
+  useEffect(() => {
+    if (profile && !tourSeen(profile.id)) setShowTour(true);
+  }, [profile]);
+
+  const closeTour = useCallback(() => {
+    if (profile) markTourSeen(profile.id);
+    setShowTour(false);
+  }, [profile]);
   const [qrClaiming, setQrClaiming] = useState(
     () => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("k"),
   );
@@ -325,10 +354,11 @@ export function PatronApp({ slug }: { slug: string }) {
           {tab === "ranks" && <LeaderboardTab venue={venue} match={match} />}
           {tab === "wallet" && <WalletTab />}
           {tab === "offers" && <OffersTab venueId={venue.id} />}
-          {tab === "more" && <MoreTab profile={profile} onProfile={setProfile} />}
+          {tab === "more" && <MoreTab profile={profile} onProfile={setProfile} onReplayTour={() => setShowTour(true)} />}
         </main>
 
         <BottomNav tab={tab} onTab={setTab} />
+        <AnimatePresence>{showTour && <HowToPlayTour onClose={closeTour} />}</AnimatePresence>
       </div>
     </Shell>
   );
