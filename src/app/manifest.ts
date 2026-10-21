@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: process.env.NEXT_PUBLIC_APP_NAME || "MatchDay",
-    short_name: process.env.NEXT_PUBLIC_APP_NAME || "MatchDay",
+    name: process.env.NEXT_PUBLIC_APP_NAME || "SportsAura",
+    short_name: process.env.NEXT_PUBLIC_APP_NAME || "SportsAura",
     description: "Free live match predictions at your sports bar.",
     start_url: "/",
     display: "standalone",

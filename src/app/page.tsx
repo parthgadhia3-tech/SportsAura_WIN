@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { APP_NAME } from "@/lib/copy";
+import { LegalLinks } from "@/components/LegalLinks";
 
 export default function Home() {
   return (
@@ -19,6 +20,7 @@ export default function Home() {
           Open my wallet
         </Link>
       </div>
+      <LegalLinks className="mx-auto mb-4 w-full max-w-md !justify-start" />
       <nav className="mx-auto flex w-full max-w-md gap-5 text-sm text-ink/55" aria-label="Staff">
         <Link href="/venue" className="underline">Venue dashboard</Link>
         <Link href="/admin" className="underline">Game Master</Link>

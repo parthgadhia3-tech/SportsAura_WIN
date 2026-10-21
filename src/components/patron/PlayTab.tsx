@@ -7,6 +7,7 @@ import { friendlyError } from "@/lib/copy";
 import { BUCKET_PUBLIC_COLUMNS, type Bucket, type Match, type Question, type Venue, type WalletCoupon } from "@/lib/types";
 import { Celebration } from "./Celebration";
 import { ErrorNote } from "./ui";
+import { LegalLinks } from "@/components/LegalLinks";
 
 type AnswerRow = { question_id: string; selected_option: number; is_correct: boolean | null; points_awarded: number };
 type BucketLite = Pick<Bucket, "id" | "brand_name" | "title" | "is_alcohol" | "min_age">;
@@ -271,6 +272,8 @@ export function PlayTab({
           </ul>
         </section>
       )}
+
+      <LegalLinks className="pt-4" />
 
       <AnimatePresence>
         {celebrate && (

@@ -6,7 +6,7 @@ set client_min_messages = warning;
 -- ---------- test helpers (created as superuser) ----------
 create or replace function public.t_as(uid uuid) returns void language plpgsql as $$
 begin
-  perform set_config('request.jwt.claims', json_build_object('sub', uid)::text, false);
+  perform set_config('request.jwt.claims', json_build_object('sub', uid, 'aal', 'aal2')::text, false);
 end $$;
 
 create or replace function public.t_expect_error(stmt text, pattern text) returns void language plpgsql as $$
@@ -358,7 +358,7 @@ do $$
 declare i int; qid uuid;
 begin
   for i in 1..12 loop
-    perform set_config('request.jwt.claims', '{"sub":"22222222-0000-0000-0000-000000000001"}', false);
+    perform set_config('request.jwt.claims', '{"sub":"22222222-0000-0000-0000-000000000001","aal":"aal2"}', false);
     insert into public.questions (match_id, prompt, options) values ('00000000-0000-0000-0000-00000000cc02', 'Set q ' || i, '{Yes,No}')
       returning id into qid;
     perform push_question(qid);
@@ -366,7 +366,7 @@ begin
     perform submit_answer(qid, 0::smallint);
     perform set_config('request.jwt.claims', '{"sub":"11111111-0000-0000-0000-000000000001"}', false);
     perform submit_answer(qid, case when i = 1 then 0 else 1 end::smallint);
-    perform set_config('request.jwt.claims', '{"sub":"22222222-0000-0000-0000-000000000001"}', false);
+    perform set_config('request.jwt.claims', '{"sub":"22222222-0000-0000-0000-000000000001","aal":"aal2"}', false);
     perform resolve_question(qid, 0::smallint);
   end loop;
 end $$;
@@ -400,5 +400,61 @@ begin
     'non-event answers come from the random pool';
 end $$;
 \echo REWARD_SETS_OK
+
+
+-- =====================================================================
+-- Security: staff need 2-step login; audit log; offers switch; settings
+-- =====================================================================
+set role authenticated;
+-- Game Master signed in with password only (aal1) is blocked from staff actions
+select set_config('request.jwt.claims', '{"sub":"22222222-0000-0000-0000-000000000001","aal":"aal1"}', false);
+select t_expect_error($$select push_question((select id from public.questions where status='draft' limit 1))$$, 'forbidden');
+do $$ begin
+  assert (select count(*) from public.questions where status = 'draft') = 0, 'aal1 staff cannot see drafts';
+  assert (select count(*) from public.staff) = 1, 'aal1 staff can still read own staff row (to start 2-step setup)';
+end $$;
+select set_config('request.jwt.claims', '{"sub":"22222222-0000-0000-0000-000000000002","aal":"aal1"}', false);
+select t_expect_error($$select * from current_venue_pin('00000000-0000-0000-0000-0000000000b1')$$, 'forbidden');
+
+-- With 2-step login (aal2) it works
+select t_as('22222222-0000-0000-0000-000000000002');
+do $$ begin assert (select count(*) from current_venue_pin('00000000-0000-0000-0000-0000000000b1')) = 1, 'aal2 staff ok'; end $$;
+
+-- Settings: public read, admin-only write
+reset role;
+insert into public.staff (user_id, role, name) values ('22222222-0000-0000-0000-000000000003', 'admin', 'Owner')
+  on conflict (user_id) do update set role = 'admin', venue_id = null, name = 'Owner';
+set role anon;
+do $$ begin assert (select require_staff_mfa from public.app_settings), 'anon reads settings'; end $$;
+set role authenticated;
+select t_as('22222222-0000-0000-0000-000000000001');   -- game master: not admin
+update public.app_settings set terms_url = 'https://evil.example/terms';
+do $$ begin assert (select terms_url is null from public.app_settings), 'game master cannot change settings'; end $$;
+select t_as('22222222-0000-0000-0000-000000000003');   -- admin
+update public.app_settings set terms_url = 'https://example.com/terms', grievance_email = 'grievance@example.com';
+do $$ begin assert (select terms_url = 'https://example.com/terms' from public.app_settings), 'admin changes settings'; end $$;
+select t_expect_error($$update public.app_settings set terms_url = 'http://insecure.example'$$, 'check');
+
+-- Audit log captured settlement, settings change; only admin can read; nobody can edit
+do $$ begin
+  assert (select count(*) from public.audit_log where action = 'resolved' and entity = 'question') >= 1, 'settlements audited';
+  assert (select count(*) from public.audit_log where entity = 'app_settings') >= 1, 'settings change audited';
+  assert (select count(*) from public.audit_log where action = 'redeem') >= 1, 'redemption audited';
+  assert (select actor_name from public.audit_log where entity = 'app_settings' order by id desc limit 1) = 'Owner', 'actor recorded';
+end $$;
+delete from public.audit_log;   -- RLS: silently 0 rows
+do $$ begin assert (select count(*) from public.audit_log) > 0, 'audit log cannot be deleted'; end $$;
+select t_as('22222222-0000-0000-0000-000000000001');
+do $$ begin assert (select count(*) from public.audit_log) = 0, 'non-admin cannot read audit log'; end $$;
+
+-- Player switches offers off and on
+select t_as('11111111-0000-0000-0000-000000000001');
+do $$ begin
+  assert set_marketing_consent(false) is null, 'offers off';
+  assert (select marketing_consent_at is null from public.users), 'stored off';
+  assert set_marketing_consent(true) is not null, 'offers on';
+end $$;
+reset role;
+\echo SECURITY_OK
 
 \echo ALL_TESTS_PASSED

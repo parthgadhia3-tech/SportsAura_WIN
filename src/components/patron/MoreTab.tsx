@@ -22,6 +22,17 @@ export function MoreTab({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  const [offers, setOffers] = useState(Boolean(profile.marketing_consent_at));
+  async function toggleOffers(on: boolean) {
+    setOffers(on);
+    const { data, error } = await supabase().rpc("set_marketing_consent", { p_on: on });
+    if (error) {
+      setOffers(!on);
+      return setError(friendlyError(error));
+    }
+    onProfile({ ...profile, marketing_consent_at: (data as string | null) ?? null });
+  }
+
   async function confirm25() {
     const { error } = await supabase().rpc("confirm_age_25");
     if (error) return setError(friendlyError(error));
@@ -98,6 +109,21 @@ export function MoreTab({
               {profile.age_verified_25 ? "Confirmed 25+. Eligible for all rewards." : "Confirmed 21+."}
             </p>
           </div>
+
+          <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl bg-surface/80 p-4">
+            <span>
+              <span className="block font-semibold">Club offers during the match</span>
+              <span className="block text-sm text-ink/60">{offers ? "On. You can switch this off any time." : "Off"}</span>
+            </span>
+            <input
+              type="checkbox"
+              role="switch"
+              aria-checked={offers}
+              checked={offers}
+              onChange={(e) => toggleOffers(e.target.checked)}
+              className="size-6 shrink-0 accent-[var(--brand-primary)]"
+            />
+          </label>
 
           {!profile.age_verified_25 && (
             <GhostButton onClick={confirm25}>I&apos;m 25 or older. Unlock spirits rewards</GhostButton>

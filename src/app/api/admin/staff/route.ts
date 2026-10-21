@@ -2,6 +2,14 @@ import { supabaseAdmin } from "@/lib/supabase-admin";
 
 const ROLES = new Set(["admin", "game_master", "venue_manager"]);
 
+function tokenAal(token: string): string | undefined {
+  try {
+    return JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8")).aal;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Admin-only: create a staff login (email + password) and its role. */
 export async function POST(request: Request) {
   const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
@@ -12,6 +20,11 @@ export async function POST(request: Request) {
   if (!caller.user) return Response.json({ error: "Sign in again." }, { status: 401 });
   const { data: me } = await db.from("staff").select("role").eq("user_id", caller.user.id).maybeSingle();
   if (me?.role !== "admin") return Response.json({ error: "Only admins can add staff." }, { status: 403 });
+
+  // The token was verified by getUser above; also require it to carry 2-step login.
+  const { data: settings } = await db.from("app_settings").select("require_staff_mfa").maybeSingle();
+  if (settings?.require_staff_mfa !== false && tokenAal(token) !== "aal2")
+    return Response.json({ error: "Complete 2-step login first." }, { status: 403 });
 
   const body = (await request.json().catch(() => null)) as
     | { name?: string; email?: string; password?: string; role?: string; venue_id?: string | null }

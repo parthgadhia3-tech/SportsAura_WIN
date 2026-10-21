@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { ErrorNote, Field, GhostButton, PrimaryButton, inputClass } from "./ui";
+import { LegalLinks } from "@/components/LegalLinks";
 
 export function PhoneLogin({ venueName }: { venueName: string }) {
   const [phone, setPhone] = useState("");
@@ -111,6 +112,7 @@ export function PhoneLogin({ venueName }: { venueName: string }) {
           </div>
         </form>
       )}
+      <LegalLinks />
     </div>
   );
 }

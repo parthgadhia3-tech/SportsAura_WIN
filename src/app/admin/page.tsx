@@ -9,7 +9,9 @@ import {
   AnalyticsPanel,
   MatchesPanel,
   OffersPanel,
+  AuditPanel,
   RewardsPanel,
+  SettingsPanel,
   StaffPanel,
   ThemesPanel,
   VenuesPanel,
@@ -24,6 +26,8 @@ const TABS = [
   { key: "analytics", label: "Analytics", admin: false },
   { key: "venues", label: "Venues", admin: true },
   { key: "staff", label: "Staff", admin: true },
+  { key: "audit", label: "Audit", admin: true },
+  { key: "settings", label: "Settings", admin: true },
 ] as const;
 type Tab = (typeof TABS)[number]["key"];
 
@@ -72,6 +76,8 @@ function Console({ staff }: { staff: StaffMember }) {
         {tab === "analytics" && <AnalyticsPanel />}
         {tab === "venues" && <VenuesPanel />}
         {tab === "staff" && <StaffPanel />}
+        {tab === "audit" && <AuditPanel />}
+        {tab === "settings" && <SettingsPanel />}
       </main>
     </div>
   );

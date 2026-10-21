@@ -927,3 +927,169 @@ export function AnalyticsPanel() {
     </Card>
   );
 }
+
+// ---------------------------------------------------------------- settings (legal + security)
+type SettingsForm = {
+  terms_url: string;
+  privacy_url: string;
+  operator_name: string;
+  operator_address: string;
+  grievance_name: string;
+  grievance_email: string;
+  support_email: string;
+  require_staff_mfa: boolean;
+};
+
+export function SettingsPanel() {
+  const [f, setF] = useState<SettingsForm | null>(null);
+  const s = useStatus();
+  const set = <K extends keyof SettingsForm>(k: K, v: SettingsForm[K]) => setF((x) => (x ? { ...x, [k]: v } : x));
+
+  const load = useCallback(async () => {
+    const { data } = await supabase().from("app_settings").select("*").maybeSingle();
+    const d = (data ?? {}) as Partial<Record<keyof SettingsForm, string | boolean | null>>;
+    setF({
+      terms_url: (d.terms_url as string) ?? "",
+      privacy_url: (d.privacy_url as string) ?? "",
+      operator_name: (d.operator_name as string) ?? "",
+      operator_address: (d.operator_address as string) ?? "",
+      grievance_name: (d.grievance_name as string) ?? "",
+      grievance_email: (d.grievance_email as string) ?? "",
+      support_email: (d.support_email as string) ?? "",
+      require_staff_mfa: d.require_staff_mfa !== false,
+    });
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!f) return;
+    if (!f.require_staff_mfa && !confirm("Turning off 2-step login makes every staff account easier to break into. Continue?")) return;
+    const clean = (v: string) => v.trim() || null;
+    const { error } = await supabase()
+      .from("app_settings")
+      .update({
+        terms_url: clean(f.terms_url),
+        privacy_url: clean(f.privacy_url),
+        operator_name: clean(f.operator_name),
+        operator_address: clean(f.operator_address),
+        grievance_name: clean(f.grievance_name),
+        grievance_email: clean(f.grievance_email),
+        support_email: clean(f.support_email),
+        require_staff_mfa: f.require_staff_mfa,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", true);
+    if (error)
+      return s.fail(
+        error.message.includes("url") ? "Links must start with https://" : error.message.includes("email") ? "Check the email addresses." : error,
+      );
+    s.ok("Settings saved. Players see the new links right away.");
+    load();
+  }
+
+  if (!f) return null;
+  const missing = !f.operator_name || !f.grievance_email;
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[520px_1fr]">
+      <Card title="Legal and contact">
+        <form onSubmit={save} className="flex flex-col gap-3">
+          {missing && (
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Add the company name and a grievance email before public launch. They appear in the Terms and Privacy Notice.
+            </p>
+          )}
+          <label>
+            Terms of Use link (https)
+            <input type="url" pattern="https://.*" value={f.terms_url} onChange={(e) => set("terms_url", e.target.value)} placeholder="Leave empty to use the built-in /terms page" />
+          </label>
+          <label>
+            Privacy Notice link (https)
+            <input type="url" pattern="https://.*" value={f.privacy_url} onChange={(e) => set("privacy_url", e.target.value)} placeholder="Leave empty to use the built-in /privacy page" />
+          </label>
+          <label>Company name (operator)<input value={f.operator_name} onChange={(e) => set("operator_name", e.target.value)} placeholder="e.g. SportsAura Technologies Private Limited" /></label>
+          <label>Registered address<input value={f.operator_address} onChange={(e) => set("operator_address", e.target.value)} /></label>
+          <div className="grid grid-cols-2 gap-3">
+            <label>Grievance officer name<input value={f.grievance_name} onChange={(e) => set("grievance_name", e.target.value)} /></label>
+            <label>Grievance officer email<input type="email" value={f.grievance_email} onChange={(e) => set("grievance_email", e.target.value)} /></label>
+          </div>
+          <label>Support email<input type="email" value={f.support_email} onChange={(e) => set("support_email", e.target.value)} /></label>
+          <label className="!flex items-start gap-2 rounded-lg bg-[#f1f5f3] p-3">
+            <input type="checkbox" className="!mt-1 !w-auto" checked={f.require_staff_mfa} onChange={(e) => set("require_staff_mfa", e.target.checked)} />
+            <span>
+              Require 2-step login for all staff (recommended)
+              <span className="mt-0.5 block font-normal text-[#5b6865]">Staff sign in with a password plus a code from an authenticator app.</span>
+            </span>
+          </label>
+          <button className="btn btn-dark">Save settings</button>
+          {s.node}
+        </form>
+      </Card>
+      <Card title="Where these appear">
+        <ul className="list-disc space-y-2 pl-5 text-sm text-[#3b4745]">
+          <li>The <strong>Terms</strong> and <strong>Privacy</strong> links at the bottom of the sign-in screen, the setup screen and the game screen open your links if set, otherwise the built-in pages.</li>
+          <li>Built-in pages: <a className="underline" href="/terms" target="_blank">/terms</a> and <a className="underline" href="/privacy" target="_blank">/privacy</a>. They fill in the company and grievance details above automatically.</li>
+          <li>Every change here is recorded in the Audit tab.</li>
+        </ul>
+      </Card>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- audit log
+type AuditRow = { id: number; at: string; actor_name: string | null; action: string; entity: string; summary: string | null; details: unknown };
+
+export function AuditPanel() {
+  const [rows, setRows] = useState<AuditRow[]>([]);
+  const [entity, setEntity] = useState("all");
+  const [open, setOpen] = useState<number | null>(null);
+
+  useEffect(() => {
+    let q = supabase().from("audit_log").select("*").order("at", { ascending: false }).limit(300);
+    if (entity !== "all") q = q.eq("entity", entity);
+    q.then(({ data }) => setRows((data as AuditRow[]) ?? []));
+  }, [entity]);
+
+  const labels: Record<string, string> = {
+    question: "Questions", coupon_buckets: "Rewards", reward_sets: "Reward sets", matches: "Matches", venues: "Venues",
+    staff: "Staff", banners: "Offers", app_settings: "Settings", user_coupon: "Redemptions", coupon_bucket_secrets: "Reward links/codes",
+  };
+
+  return (
+    <Card
+      title="Audit log"
+      aside={
+        <select className="!w-48" value={entity} onChange={(e) => setEntity(e.target.value)}>
+          <option value="all">Everything</option>
+          {Object.entries(labels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+      }
+    >
+      <p className="mb-3 text-sm text-[#5b6865]">Who did what, and when. Entries can&apos;t be edited or deleted.</p>
+      <table className="w-full text-sm">
+        <thead className="text-left text-[#5b6865]">
+          <tr><th className="py-1">When</th><th>Who</th><th>What</th><th>Item</th></tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id} className="cursor-pointer border-t border-[#eef1ef] align-top" onClick={() => setOpen(open === r.id ? null : r.id)}>
+              <td className="tabular whitespace-nowrap py-2 pr-3">{new Date(r.at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</td>
+              <td className="pr-3">{r.actor_name ?? "system"}</td>
+              <td className="pr-3">{r.action} {labels[r.entity] ? `(${labels[r.entity]})` : r.entity}</td>
+              <td>
+                {r.summary}
+                {open === r.id && r.details != null && (
+                  <pre className="mt-2 max-w-xl overflow-x-auto rounded bg-[#f1f5f3] p-2 text-xs">{JSON.stringify(r.details, null, 2)}</pre>
+                )}
+              </td>
+            </tr>
+          ))}
+          {rows.length === 0 && <tr><td colSpan={4} className="py-6 text-center text-[#5b6865]">Nothing recorded yet.</td></tr>}
+        </tbody>
+      </table>
+    </Card>
+  );
+}

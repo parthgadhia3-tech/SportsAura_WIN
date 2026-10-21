@@ -1,8 +1,8 @@
 // Product copy in one place. Vocabulary rule: Predict, Points, Rewards.
 // The build fails (npm run check:copy) if restricted words appear in src/.
 
-export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "MatchDay";
-export const TERMS_VERSION = "2026-10-20";
+export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "SportsAura";
+export { LEGAL_VERSION as TERMS_VERSION } from "./legal";
 
 export const LIABILITY_LINE =
   "No purchase necessary. Venue reserves the right to verify ID for alcohol redemption.";
@@ -59,29 +59,3 @@ export const HOW_TO_PLAY = [
   },
 ];
 
-export const TERMS: { heading: string; body: string }[] = [
-  {
-    heading: "Free to play",
-    body: "This is a free promotional game of skill and knowledge. There are no entry fees, deposits or purchases, and points have no cash value. Points cannot be bought, sold or transferred.",
-  },
-  {
-    heading: "Who can play",
-    body: "You must be 21 or older and physically present at a participating venue. Rewards involving spirits are available only to players aged 25 or older, in line with Maharashtra excise rules.",
-  },
-  {
-    heading: "Rewards",
-    body: `${LIABILITY_LINE} Rewards are provided by the venue or by the brand shown on the reward, are subject to their terms and expiry dates, and cannot be exchanged for cash. Quantities may be limited, and the fastest correct answers win first.`,
-  },
-  {
-    heading: "Location and your data",
-    body: "We use your location once when you join, and silently while you play, only to confirm you're at the venue. We store whether you passed and your distance from the venue, never your coordinates. We store your phone number, display name, answers, points, rewards and which rewards you open, to run the game and measure offers. You can delete your account from the More tab at any time, which removes your profile and history.",
-  },
-  {
-    heading: "Fair play",
-    body: "One account per person. Sharing the venue PIN with people outside the venue, automated play, or other abuse can lead to removal and cancelled rewards. The game host's decision on results is final; if a question can't be settled, it's voided and no points are awarded.",
-  },
-  {
-    heading: "Drink responsibly",
-    body: "Never drink and drive. Playing does not require you to buy or consume anything.",
-  },
-];

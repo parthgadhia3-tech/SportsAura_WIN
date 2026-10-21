@@ -6,6 +6,7 @@ import { TERMS_VERSION, friendlyError } from "@/lib/copy";
 import type { Profile } from "@/lib/types";
 import { Check, ErrorNote, Field, PrimaryButton, inputClass } from "./ui";
 import { TermsSheet } from "./TermsSheet";
+import { LegalLinks } from "@/components/LegalLinks";
 
 export function Onboarding({ onDone }: { onDone: (p: Profile) => void }) {
   const [name, setName] = useState("");
@@ -68,6 +69,7 @@ export function Onboarding({ onDone }: { onDone: (p: Profile) => void }) {
         {busy ? "Saving" : "Start playing"}
       </PrimaryButton>
       <p className="text-center text-sm text-ink/60">Free to play. No purchase necessary.</p>
+      <LegalLinks />
 
       {showTerms && <TermsSheet onClose={() => setShowTerms(false)} />}
     </div>
