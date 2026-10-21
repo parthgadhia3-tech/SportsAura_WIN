@@ -1,0 +1,117 @@
+@import "tailwindcss";
+
+/* Brand tokens. Overridden at runtime per venue/sponsor via themeVars(). */
+:root {
+  --brand-bg: radial-gradient(circle at 50% -10%, #1f5257 0%, #0c2427 45%, #071517 100%);
+  --brand-primary: #ffb020;
+  --brand-on-primary: #0a0a0a;
+  --brand-secondary: #7fe0c8;
+  --brand-text: #f3f1e8;
+  --brand-surface: #123236;
+}
+
+@theme inline {
+  --color-brand: var(--brand-primary);
+  --color-on-brand: var(--brand-on-primary);
+  --color-brand-2: var(--brand-secondary);
+  --color-ink: var(--brand-text);
+  --color-surface: var(--brand-surface);
+  --font-sans: "Barlow", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Barlow Condensed", "Barlow", ui-sans-serif, system-ui, sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.brand-canvas {
+  background: var(--brand-bg);
+  background-attachment: fixed;
+  color: var(--brand-text);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 3px solid var(--brand-primary);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Staff dashboards use a light, plain surface. */
+.staff {
+  background: #f5f6f4;
+  color: #17201f;
+}
+.staff input,
+.staff select,
+.staff textarea {
+  border: 1px solid #c9d0cd;
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+  background: #fff;
+  font: inherit;
+  width: 100%;
+}
+.staff label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #3b4745;
+}
+.staff label > input,
+.staff label > select,
+.staff label > textarea {
+  margin-top: 0.25rem;
+  font-weight: 400;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 6px;
+  padding: 0.45rem 0.9rem;
+  font-weight: 600;
+  font-size: 0.9rem;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-dark {
+  background: #17201f;
+  color: #fff;
+}
+.btn-line {
+  background: #fff;
+  border-color: #c9d0cd;
+  color: #17201f;
+}
+.btn-go {
+  background: #0f7a5c;
+  color: #fff;
+}
+.btn-warn {
+  background: #b45309;
+  color: #fff;
+}
+.btn-stop {
+  background: #b91c1c;
+  color: #fff;
+}
