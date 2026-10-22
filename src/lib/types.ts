@@ -28,6 +28,7 @@ export interface Venue {
   is_active: boolean;
   lat?: number;
   lng?: number;
+  table_count?: number;
 }
 
 export interface Match {
@@ -38,6 +39,8 @@ export interface Match {
   status: MatchStatus;
   theme_id: string | null;
   reward_set_id?: string | null;
+  sponsor_id?: string | null;
+  current_over?: number | null;
 }
 
 export type RewardRule = "random" | "first_correct" | "every_n_correct";
@@ -64,6 +67,7 @@ export interface Question {
   locks_at: string | null;
   resolved_at: string | null;
   created_at: string;
+  sponsor_id?: string | null;
 }
 
 export interface Bucket {
@@ -129,3 +133,64 @@ export interface LeaderRow {
 
 export const BUCKET_PUBLIC_COLUMNS =
   "brand_name, logo_url, title, description, terms, is_alcohol, min_age, has_link";
+
+export interface Sponsor {
+  id: string;
+  name: string;
+  logo_url: string | null;
+  tagline: string | null;
+  link_url: string | null;
+  is_active: boolean;
+}
+
+export interface QuestionTemplate {
+  id: string;
+  pack: string;
+  sport: string;
+  prompt: string;
+  options: string[];
+  points: number;
+  answer_window_s: number;
+  sort_order: number;
+  is_active: boolean;
+}
+
+export interface Season {
+  id: string;
+  name: string;
+  city: string;
+  starts_on: string;
+  ends_on: string;
+  prize_text: string | null;
+  prize_terms_url: string | null;
+  sponsor_id: string | null;
+  is_active: boolean;
+}
+
+export type VenuePlan = "pilot" | "season" | "per_reward";
+export type BillingStatus = "pending" | "trial" | "active" | "past_due" | "cancelled";
+
+export interface VenueAccount {
+  venue_id: string;
+  plan: VenuePlan;
+  status: BillingStatus;
+  contact_name: string | null;
+  contact_phone: string | null;
+  contact_email: string | null;
+  gstin: string | null;
+  paid_until: string | null;
+  approved_at: string | null;
+  notes: string | null;
+  created_at: string;
+}
+
+/** "Mumbai vs Chennai" -> ["Mumbai", "Chennai"] for {home}/{away} in question packs. */
+export function sides(title: string): [string, string] {
+  const parts = title.split(/\s+(?:vs\.?|v)\s+/i);
+  return parts.length === 2 ? [parts[0].trim(), parts[1].trim()] : ["Home", "Away"];
+}
+
+export function fillTemplate(text: string, title: string, over: number): string {
+  const [home, away] = sides(title);
+  return text.replaceAll("{over}", String(over)).replaceAll("{home}", home).replaceAll("{away}", away);
+}

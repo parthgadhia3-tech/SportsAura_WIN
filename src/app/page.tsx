@@ -24,6 +24,7 @@ export default function Home() {
       <nav className="mx-auto flex w-full max-w-md gap-5 text-sm text-ink/55" aria-label="Staff">
         <Link href="/venue" className="underline">Venue dashboard</Link>
         <Link href="/admin" className="underline">Game Master</Link>
+        <Link href="/partner" className="ml-auto font-semibold text-ink/80 underline">Own a bar? Get SportsAura</Link>
       </nav>
     </main>
   );

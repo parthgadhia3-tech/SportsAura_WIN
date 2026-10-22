@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import type { LeaderRow, Match, Venue } from "@/lib/types";
+import type { LeaderRow, Match, Question, Sponsor, Venue, VenueAccount } from "@/lib/types";
 
 /** Current rotating PIN for a venue, refreshed the moment it changes. */
 export function useVenuePin(venueId: string | null) {
@@ -105,18 +105,80 @@ export function useLeaderboard(matchId: string | undefined, venueId: string | nu
   return rows;
 }
 
-export function useVenue(venueId: string | null) {
+export function useVenue(venueId: string | null, version = 0) {
   const [venue, setVenue] = useState<Venue | null>(null);
   useEffect(() => {
     if (!venueId) return;
     supabase()
       .from("venues")
-      .select("id, name, slug, address, city, geofence_radius_m, default_theme_id, is_active")
+      .select("id, name, slug, address, city, geofence_radius_m, default_theme_id, is_active, table_count")
       .eq("id", venueId)
       .maybeSingle()
       .then(({ data }) => setVenue(data as Venue));
-  }, [venueId]);
+  }, [venueId, version]);
   return venue;
+}
+
+/** The question on phones right now (for the TV), plus its sponsor. */
+export function useLiveQuestion(match: Match | null | undefined, venueId: string | null) {
+  const [q, setQ] = useState<Question | null>(null);
+  const [sponsor, setSponsor] = useState<Pick<Sponsor, "id" | "name" | "logo_url" | "tagline"> | null>(null);
+  useEffect(() => {
+    if (!match) return setQ(null);
+    const sb = supabase();
+    const load = async () => {
+      const { data } = await sb
+        .from("questions")
+        .select("*")
+        .eq("match_id", match.id)
+        .in("status", ["live", "locked", "resolved"])
+        .order("pushed_at", { ascending: false })
+        .limit(3);
+      const list = ((data as Question[]) ?? []).filter((x) => !x.venue_id || x.venue_id === venueId);
+      const cur = list.find((x) => x.status !== "resolved") ??
+        list.find((x) => x.resolved_at && Date.now() - new Date(x.resolved_at).getTime() < 20_000) ?? null;
+      setQ(cur);
+      const sid = cur?.sponsor_id ?? match.sponsor_id;
+      if (sid) {
+        const { data: sp } = await sb.from("sponsors").select("id, name, logo_url, tagline").eq("id", sid).maybeSingle();
+        setSponsor(sp as Pick<Sponsor, "id" | "name" | "logo_url" | "tagline"> | null);
+      } else setSponsor(null);
+    };
+    load();
+    const t = setInterval(load, 3000);
+    return () => clearInterval(t);
+  }, [match, venueId]);
+  return { q, sponsor };
+}
+
+export type TableRow = { rank: number; table_no: number; players: number; points: number };
+export function useTableBoard(matchId: string | undefined, venueId: string | null, on: boolean, limit = 5) {
+  const [rows, setRows] = useState<TableRow[]>([]);
+  useEffect(() => {
+    if (!matchId || !venueId || !on) return setRows([]);
+    const load = () =>
+      supabase()
+        .rpc("get_table_leaderboard", { p_match_id: matchId, p_venue_id: venueId, p_limit: limit })
+        .then(({ data }) => setRows((data as TableRow[]) ?? []));
+    load();
+    const t = setInterval(load, 15_000);
+    return () => clearInterval(t);
+  }, [matchId, venueId, on, limit]);
+  return rows;
+}
+
+export function useVenueAccount(venueId: string | null, version = 0) {
+  const [acc, setAcc] = useState<VenueAccount | null | undefined>(undefined);
+  useEffect(() => {
+    if (!venueId) return;
+    supabase()
+      .from("venue_accounts")
+      .select("*")
+      .eq("venue_id", venueId)
+      .maybeSingle()
+      .then(({ data }) => setAcc((data as VenueAccount) ?? null));
+  }, [venueId, version]);
+  return acc;
 }
 
 export const fmtCountdown = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;

@@ -9,6 +9,8 @@ import {
   AnalyticsPanel,
   MatchesPanel,
   OffersPanel,
+  PacksPanel,
+  SponsorsPanel,
   AuditPanel,
   RewardsPanel,
   SettingsPanel,
@@ -20,11 +22,13 @@ import {
 const TABS = [
   { key: "live", label: "Live", admin: false },
   { key: "matches", label: "Matches", admin: false },
+  { key: "packs", label: "Packs", admin: false },
   { key: "rewards", label: "Rewards", admin: false },
+  { key: "sponsors", label: "Sponsors", admin: false },
   { key: "themes", label: "Themes", admin: false },
   { key: "offers", label: "Offers", admin: false },
   { key: "analytics", label: "Analytics", admin: false },
-  { key: "venues", label: "Venues", admin: true },
+  { key: "venues", label: "Venues & billing", admin: true },
   { key: "staff", label: "Staff", admin: true },
   { key: "audit", label: "Audit", admin: true },
   { key: "settings", label: "Settings", admin: true },
@@ -70,7 +74,9 @@ function Console({ staff }: { staff: StaffMember }) {
       <main className="mx-auto max-w-7xl px-4 py-6">
         {tab === "live" && <LiveConsole />}
         {tab === "matches" && <MatchesPanel />}
+        {tab === "packs" && <PacksPanel />}
         {tab === "rewards" && <RewardsPanel />}
+        {tab === "sponsors" && <SponsorsPanel isAdmin={staff.role === "admin"} />}
         {tab === "themes" && <ThemesPanel />}
         {tab === "offers" && <OffersPanel />}
         {tab === "analytics" && <AnalyticsPanel />}

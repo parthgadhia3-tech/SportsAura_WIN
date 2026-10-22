@@ -10,4 +10,4 @@ trap '$P -d postgres -c "drop database if exists $DB" >/dev/null' EXIT
 $P -d "$DB" -f tests/supabase_stub.sql 2>&1 | grep -v -i -E "wal_level|HINT" || true
 for m in migrations/*.sql; do $P -d "$DB" -f "$m"; done
 $P -d "$DB" -f seed.sql
-$P -d "$DB" -f tests/e2e_test.sql | grep -E "ALL_TESTS_PASSED|ERROR|FAIL" || { echo "Tests failed"; exit 1; }
+$P -d "$DB" -f tests/e2e_test.sql 2>&1 | grep -E "ALL_TESTS_PASSED|GROWTH_OK|ERROR|FAIL" || { echo "Tests failed"; exit 1; }

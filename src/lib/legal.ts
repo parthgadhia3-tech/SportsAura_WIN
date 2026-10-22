@@ -62,6 +62,7 @@ export function termsOfUse(s: LegalSettings | null): LegalSection[] {
         "During a match, the game host sends prediction questions. You can answer each question once, before its timer runs out, and you can't change your answer.",
         "The host settles each question based on what happens in the match. If a question can't be settled fairly (for example because of a broadcast delay, an unclear outcome or a technical problem), the host may lock it early or void it, and no points are awarded for a voided question.",
         "The host's decision on results is final, subject to the complaint process in section 11.",
+        "Bonus points, such as streak bonuses and the once-per-match 2x pick, are explained in How to play. Like all points, they have no cash value.",
       ],
     },
     {
@@ -70,6 +71,7 @@ export function termsOfUse(s: LegalSettings | null): LegalSection[] {
         "Some correct answers win a reward, such as a food or drink offer from the venue or an offer from a partner brand. Rewards are provided by the venue or brand named on the reward, not by us, and are subject to their terms, availability and expiry dates.",
         "Rewards are limited and are given while stocks last, generally in the order correct answers were received. A reward can't be exchanged for cash, transferred or resold.",
         "No purchase is necessary. The venue reserves the right to verify ID for alcohol redemption and may refuse service in line with the law and its own policies.",
+        "Season prizes, where offered on a city leaderboard, follow their own prize terms linked next to the prize.",
         "Some brand rewards open the brand's own website. We may receive a commission when you use these links. Your use of a brand's website is governed by that brand's terms and privacy policy.",
       ],
     },
@@ -197,6 +199,56 @@ export function privacyNotice(s: LegalSettings | null): LegalSection[] {
       heading: "9. Changes",
       paras: [
         "We may update this notice. If the changes are significant, we will tell you in the app.",
+      ],
+    },
+  ];
+}
+
+/** Terms for venues that sign up (draft: have a lawyer review before launch). */
+export function venueTerms(s: LegalSettings | null): LegalSection[] {
+  const w = who(s);
+  return [
+    {
+      heading: "1. The service",
+      paras: [
+        `${w.name} provides SportsAura to your venue: the free player game, the TV screen, the venue dashboard, reports and support. These Venue Partner Terms apply together with the plan you choose when you sign up.`,
+      ],
+    },
+    {
+      heading: "2. Plans and payment",
+      paras: [
+        "Season pass: a single payment for the period shown when you pay. Pay per reward: a monthly bill for each reward redeemed at your venue, at the rate shown on your Plan & billing page.",
+        "Online payments are processed by Razorpay. Prices may change for future periods; we will tell you before a change applies to you. Fees already paid for a period are not refundable once that period has started, except where the law requires.",
+        "We may pause the service at your venue if a bill is unpaid 15 days after its due date.",
+      ],
+    },
+    {
+      heading: "3. Your responsibilities",
+      paras: [
+        "You confirm you hold any licences needed to screen matches and to run your business, including any commercial viewing subscription required by the broadcaster.",
+        "You honour rewards you offer through SportsAura while they are valid, check ID where the law or the reward requires it, refuse alcohol to anyone under the legal age, and serve responsibly.",
+        "You won't charge guests to play, sell points, or present SportsAura as betting or gambling. You won't offer alcohol brand sponsorships through SportsAura.", // check-copy:allow (legal)
+        "You keep your staff login, 2-step login device and the TV screen secure, and tell us promptly if you suspect misuse.",
+      ],
+    },
+    {
+      heading: "4. Data",
+      paras: [
+        "Guests' personal data is controlled by us under our Privacy Notice. Through the dashboard you see display names, points, check-in method and redemptions at your venue, and aggregate reports. You use this only to run the game and your venue, and you don't copy it elsewhere.",
+      ],
+    },
+    {
+      heading: "5. Names and content",
+      paras: [
+        "You let us show your venue name, address and logo in the app and in our marketing of SportsAura. You don't use league, team or broadcaster logos in SportsAura content you supply.",
+      ],
+    },
+    {
+      heading: "6. Liability and ending",
+      paras: [
+        "We work to keep SportsAura available but don't guarantee it will be uninterrupted. To the extent the law allows, our total liability to your venue is limited to the fees you paid us in the 3 months before the claim.",
+        "Either side may end these terms with 30 days' notice, or straight away if the other seriously breaches them. These terms are governed by the laws of India, with courts at Mumbai, Maharashtra.",
+        w.support ? `Questions: ${w.support}.` : "Questions: contact us through the details on our website.",
       ],
     },
   ];

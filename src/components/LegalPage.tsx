@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { themeVars } from "@/lib/theme";
-import { LEGAL_UPDATED, privacyNotice, termsOfUse } from "@/lib/legal";
+import { LEGAL_UPDATED, privacyNotice, termsOfUse, venueTerms } from "@/lib/legal";
 import { useLegalSettings } from "@/lib/useLegalSettings";
 
-export function LegalPage({ kind }: { kind: "terms" | "privacy" }) {
+export function LegalPage({ kind }: { kind: "terms" | "privacy" | "venue" }) {
   const { settings } = useLegalSettings();
-  const sections = kind === "terms" ? termsOfUse(settings) : privacyNotice(settings);
-  const title = kind === "terms" ? "Terms of Use" : "Privacy Notice";
+  const sections = kind === "terms" ? termsOfUse(settings) : kind === "venue" ? venueTerms(settings) : privacyNotice(settings);
+  const title = kind === "terms" ? "Terms of Use" : kind === "venue" ? "Venue Partner Terms" : "Privacy Notice";
 
   return (
     <div className="brand-canvas min-h-dvh" style={themeVars(null)}>

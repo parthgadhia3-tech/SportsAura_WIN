@@ -1,14 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabase-admin";
+import { tokenAal } from "@/lib/server-auth";
 
 const ROLES = new Set(["admin", "game_master", "venue_manager"]);
-
-function tokenAal(token: string): string | undefined {
-  try {
-    return JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8")).aal;
-  } catch {
-    return undefined;
-  }
-}
 
 /** Admin-only: create a staff login (email + password) and its role. */
 export async function POST(request: Request) {

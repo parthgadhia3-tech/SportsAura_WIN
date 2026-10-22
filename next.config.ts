@@ -8,12 +8,14 @@ const supabaseWs = supabaseUrl.replace(/^http/, "ws");
 // Supabase project, and no framing by other sites (clickjacking).
 const csp = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+  // Razorpay Checkout (venue billing) loads its script and payment window from razorpay.com.
+  `script-src 'self' 'unsafe-inline' https://checkout.razorpay.com${isDev ? " 'unsafe-eval'" : ""}`,
+  "frame-src https://api.razorpay.com https://checkout.razorpay.com",
   "style-src 'self' 'unsafe-inline'",
   // Brand logos, offer banners and theme backgrounds are https URLs set by admins.
   "img-src 'self' blob: data: https:",
   "font-src 'self'",
-  `connect-src 'self' ${supabaseUrl} ${supabaseWs}`.trim(),
+  `connect-src 'self' ${supabaseUrl} ${supabaseWs} https://api.razorpay.com https://lumberjack.razorpay.com`.trim(),
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -27,7 +29,7 @@ const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   // Location is used only by this site (venue check-in); camera, mic etc. are off.
-  { key: "Permissions-Policy", value: "geolocation=(self), camera=(), microphone=(), payment=(), usb=()" },
+  { key: "Permissions-Policy", value: "geolocation=(self), camera=(), microphone=(), payment=(self \"https://api.razorpay.com\"), usb=()" },
   { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
 ];
 

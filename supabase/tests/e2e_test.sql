@@ -457,4 +457,130 @@ end $$;
 reset role;
 \echo SECURITY_OK
 
+-- =====================================================================
+-- Growth: double points, streaks, tables, city season, report, accounts
+-- =====================================================================
+set role authenticated;
+select t_as('22222222-0000-0000-0000-000000000001');
+insert into public.sponsors (id, name) values ('00000000-0000-0000-0000-00000000dd01', 'Ride Co');
+insert into public.matches (id, title, starts_at, status, sponsor_id)
+values ('00000000-0000-0000-0000-00000000cc03', 'Growth match', now(), 'live', '00000000-0000-0000-0000-00000000dd01');
+reset role;
+update public.venues set table_count = 10 where id = '00000000-0000-0000-0000-0000000000b1';
+insert into public.player_sessions (user_id, venue_id, match_id, verification_method)
+values ('11111111-0000-0000-0000-000000000001', '00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-00000000cc03', 'qr'),
+       ('11111111-0000-0000-0000-000000000002', '00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-00000000cc03', 'pin');
+set role authenticated;
+
+-- tables
+select t_as('11111111-0000-0000-0000-000000000001');
+select t_expect_error($$select set_my_table('00000000-0000-0000-0000-00000000cc03', 11::smallint)$$, 'invalid_table');
+select set_my_table('00000000-0000-0000-0000-00000000cc03', 4::smallint);
+select t_as('11111111-0000-0000-0000-000000000002');
+select set_my_table('00000000-0000-0000-0000-00000000cc03', 4::smallint);
+select t_as('11111111-0000-0000-0000-000000000004');   -- a player, not staff
+select t_expect_error($$select set_venue_tables('00000000-0000-0000-0000-0000000000b1', 5::smallint)$$, 'forbidden');
+
+-- 4 questions: Asha right on all (double on q2), Bilal right on q1 only
+do $$
+declare i int; qid uuid;
+begin
+  for i in 1..4 loop
+    perform set_config('request.jwt.claims', '{"sub":"22222222-0000-0000-0000-000000000001","aal":"aal2"}', false);
+    insert into public.questions (match_id, prompt, options, points) values ('00000000-0000-0000-0000-00000000cc03', 'Growth q ' || i, '{Yes,No}', 20)
+      returning id into qid;
+    perform push_question(qid);
+    perform set_config('request.jwt.claims', '{"sub":"11111111-0000-0000-0000-000000000001"}', false);
+    perform submit_prediction(qid, 0::smallint, i = 2);
+    if i = 3 then
+      begin
+        perform submit_prediction(qid, 0::smallint, true);
+        raise exception 'second answer should fail';
+      exception when others then
+        if sqlerrm not like '%already_answered%' and sqlerrm not like '%double_used%' then raise; end if;
+      end;
+    end if;
+    perform set_config('request.jwt.claims', '{"sub":"11111111-0000-0000-0000-000000000002"}', false);
+    perform submit_answer(qid, case when i = 1 then 0 else 1 end::smallint);
+    perform set_config('request.jwt.claims', '{"sub":"22222222-0000-0000-0000-000000000001","aal":"aal2"}', false);
+    perform resolve_question(qid, 0::smallint);
+  end loop;
+end $$;
+
+-- a second double in the same match is refused
+select t_as('22222222-0000-0000-0000-000000000001');
+insert into public.questions (id, match_id, prompt, options) values ('00000000-0000-0000-0000-00000000ee01', '00000000-0000-0000-0000-00000000cc03', 'Growth q 5', '{Yes,No}');
+select push_question('00000000-0000-0000-0000-00000000ee01');
+select t_as('11111111-0000-0000-0000-000000000001');
+select t_expect_error($$select submit_prediction('00000000-0000-0000-0000-00000000ee01', 0::smallint, true)$$, 'double_used');
+-- voiding gives the double back
+select t_as('11111111-0000-0000-0000-000000000002');
+select submit_prediction('00000000-0000-0000-0000-00000000ee01', 0::smallint, true);
+select t_as('22222222-0000-0000-0000-000000000001');
+select void_question('00000000-0000-0000-0000-00000000ee01');
+
+reset role;
+do $$
+declare asha public.player_sessions; bilal public.player_sessions;
+begin
+  select * into asha from public.player_sessions where user_id = '11111111-0000-0000-0000-000000000001' and match_id = '00000000-0000-0000-0000-00000000cc03';
+  select * into bilal from public.player_sessions where user_id = '11111111-0000-0000-0000-000000000002' and match_id = '00000000-0000-0000-0000-00000000cc03';
+  -- q1 20, q2 40 (double), q3 20+10 streak, q4 20+10 streak = 120
+  assert asha.points_total = 120, 'Asha points with double + streak, got ' || asha.points_total;
+  assert asha.streak = 4 and asha.best_streak = 4, 'Asha streak 4';
+  assert asha.double_used, 'Asha double used';
+  assert bilal.points_total = 20 and bilal.streak = 0 and bilal.best_streak = 1, 'Bilal: one right then wrong';
+  assert not bilal.double_used, 'void returned Bilal''s double';
+end $$;
+
+set role authenticated;
+select t_as('11111111-0000-0000-0000-000000000001');
+do $$ begin
+  assert (select points from get_table_leaderboard('00000000-0000-0000-0000-00000000cc03', '00000000-0000-0000-0000-0000000000b1') where table_no = 4) = 140, 'table 4 = 120 + 20';
+  assert (select is_mine from get_table_leaderboard('00000000-0000-0000-0000-00000000cc03', '00000000-0000-0000-0000-0000000000b1') where table_no = 4), 'my table flagged';
+end $$;
+
+-- city season
+reset role;
+insert into public.seasons (id, name, city, starts_on, ends_on, prize_text)
+values ('00000000-0000-0000-0000-00000000ff01', 'Mumbai test season', 'mumbai', current_date - 1, current_date + 30, 'Prize');
+set role authenticated;
+select t_as('11111111-0000-0000-0000-000000000002');
+do $$ begin
+  assert (select points from city_leaderboard('00000000-0000-0000-0000-00000000ff01') where display_name = 'Asha')
+         = 160, 'Asha city total = all her Mumbai sessions (30 + 10 + 120)';
+  assert (select count(*) from city_leaderboard('00000000-0000-0000-0000-00000000ff01') where rank = 1) >= 1, 'has a leader';
+  assert (select count(*) from city_leaderboard('00000000-0000-0000-0000-00000000ff01') where is_me) = 1, 'my row present';
+end $$;
+
+-- sponsor report (game master) and report access
+select t_as('22222222-0000-0000-0000-000000000001');
+do $$ begin
+  assert (select plays from sponsor_report() where sponsor = 'Ride Co') >= 8, 'match sponsor credited with plays';
+end $$;
+select t_as('22222222-0000-0000-0000-000000000002');
+do $$ declare r jsonb; begin
+  r := venue_monthly_report('00000000-0000-0000-0000-0000000000b1', current_date);
+  assert (r->>'checkins')::int >= 2, 'report counts check-ins';
+  assert (r->>'table_players')::int >= 2, 'report counts table players';
+  assert jsonb_array_length(r->'top_matches') >= 1, 'report lists matches';
+end $$;
+select t_as('11111111-0000-0000-0000-000000000004');
+select t_expect_error($$select venue_monthly_report('00000000-0000-0000-0000-0000000000b1', current_date)$$, 'forbidden');
+
+-- venue accounts: every venue has one; a manager sees only their own; cannot edit
+reset role;
+do $$ begin
+  assert (select count(*) from public.venue_accounts) = (select count(*) from public.venues), 'every venue has an account row';
+end $$;
+set role authenticated;
+select t_as('22222222-0000-0000-0000-000000000002');
+do $$ begin assert (select count(*) from public.venue_accounts) = 1, 'manager sees own account only'; end $$;
+update public.venue_accounts set status = 'active', paid_until = '2099-01-01';
+do $$ begin assert (select paid_until is null from public.venue_accounts), 'manager cannot mark self paid'; end $$;
+select t_expect_error($$insert into public.payments (venue_id, plan, amount_paise) values ('00000000-0000-0000-0000-0000000000b1', 'season', 100)$$, 'row-level security');
+reset role;
+do $$ begin assert (select count(*) from public.payments) = 0, 'manager cannot insert payments'; end $$;
+\echo GROWTH_OK
+
 \echo ALL_TESTS_PASSED

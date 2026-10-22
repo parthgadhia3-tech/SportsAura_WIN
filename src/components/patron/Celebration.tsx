@@ -15,11 +15,15 @@ export function Celebration({
   points,
   coupon,
   extra = 0,
+  double = false,
+  bonus = 0,
   onClose,
 }: {
   points: number;
   coupon: WalletCoupon | null;
   extra?: number;
+  double?: boolean;
+  bonus?: number;
   onClose: () => void;
 }) {
   const reduce = useReducedMotion();
@@ -68,6 +72,17 @@ export function Celebration({
       >
         +{points}
       </motion.p>
+      {(double || bonus > 0) && (
+        <motion.div
+          className="mt-3 flex flex-wrap justify-center gap-2"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.45 }}
+        >
+          {double && <span className="rounded-full bg-brand px-4 py-1.5 font-display text-lg font-bold text-on-brand">2x points</span>}
+          {bonus > 0 && <span className="rounded-full border-2 border-brand px-4 py-1 font-display text-lg font-bold text-brand">+{bonus} streak bonus</span>}
+        </motion.div>
+      )}
 
       {coupon ? (
         <motion.div

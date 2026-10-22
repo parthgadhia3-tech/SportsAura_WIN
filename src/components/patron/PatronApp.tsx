@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import { themeVars } from "@/lib/theme";
-import type { Match, Profile, Theme, Venue } from "@/lib/types";
+import type { Match, Profile, Sponsor, Theme, Venue } from "@/lib/types";
 import { PhoneLogin } from "./PhoneLogin";
 import { Onboarding } from "./Onboarding";
 import { VerifyPresence, getPosition } from "./VerifyPresence";
@@ -79,6 +79,22 @@ export function PatronApp({ slug }: { slug: string }) {
   const [tab, setTab] = useState<Tab>("play");
   const [qrExpired, setQrExpired] = useState(false);
   const [showTour, setShowTour] = useState(false);
+  const [sponsor, setSponsor] = useState<Pick<Sponsor, "name" | "logo_url"> | null>(null);
+  const [tableHint, setTableHint] = useState<number | null>(null);
+
+  // Table coaster (?t=12): remember the table for this visit.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const fromUrl = Number(params.get("t"));
+    let n: number | null = Number.isInteger(fromUrl) && fromUrl > 0 ? fromUrl : null;
+    try {
+      if (n) sessionStorage.setItem("md-table", String(n));
+      else n = Number(sessionStorage.getItem("md-table")) || null;
+    } catch {
+      /* ignore */
+    }
+    setTableHint(n);
+  }, []);
 
   // First time this account plays on this phone: show the walkthrough.
   useEffect(() => {
@@ -124,14 +140,14 @@ export function PatronApp({ slug }: { slug: string }) {
     (async () => {
       const { data: v } = await sb
         .from("venues")
-        .select("id, name, slug, address, city, geofence_radius_m, default_theme_id, is_active")
+        .select("id, name, slug, address, city, geofence_radius_m, default_theme_id, is_active, table_count")
         .eq("slug", slug)
         .eq("is_active", true)
         .maybeSingle();
       if (!v) return setVenue(null);
       const { data: m } = await sb
         .from("matches")
-        .select("id, title, sport, starts_at, status, theme_id, reward_set_id")
+        .select("id, title, sport, starts_at, status, theme_id, reward_set_id, sponsor_id, current_over")
         .eq("status", "live")
         .order("starts_at", { ascending: false })
         .limit(1)
@@ -140,6 +156,11 @@ export function PatronApp({ slug }: { slug: string }) {
       if (themeId) {
         const { data: t } = await sb.from("themes").select("*").eq("id", themeId).maybeSingle();
         setTheme(t as Theme | null);
+      }
+      const sid = (m as Match | null)?.sponsor_id;
+      if (sid) {
+        const { data: sp } = await sb.from("sponsors").select("name, logo_url").eq("id", sid).maybeSingle();
+        setSponsor(sp as Pick<Sponsor, "name" | "logo_url"> | null);
       }
       setMatch(m as Match | null);
       setVenue(v as Venue);
@@ -318,6 +339,7 @@ export function PatronApp({ slug }: { slug: string }) {
         venue={venue}
         match={match}
         onPointsChanged={refreshPoints}
+        tableHint={tableHint}
         onNeedsVerify={() => {
           setReturning(true);
           setPresence("verify");
@@ -338,7 +360,7 @@ export function PatronApp({ slug }: { slug: string }) {
             <p className="truncate font-display text-xl font-bold leading-tight">{match?.title ?? venue.name}</p>
             <p className="truncate text-sm text-ink/65">
               {venue.name}
-              {theme?.sponsor_name ? ` with ${theme.sponsor_name}` : ""}
+              {sponsor ? ` · presented by ${sponsor.name}` : theme?.sponsor_name ? ` with ${theme.sponsor_name}` : ""}
             </p>
           </div>
           {presence === "ok" && match && (

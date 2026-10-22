@@ -5,7 +5,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
 import { friendlyError } from "@/lib/copy";
 import { DEFAULT_THEME, themeVars } from "@/lib/theme";
-import type { Banner, Bucket, BgType, CodeMode, Match, RewardRule, RewardSet, Theme, Venue } from "@/lib/types";
+import type { Banner, BillingStatus, Bucket, BgType, CodeMode, Match, QuestionTemplate, RewardRule, RewardSet, Season, Sponsor, Theme, Venue, VenueAccount, VenuePlan } from "@/lib/types";
 
 // ---------------------------------------------------------------- helpers
 function useStatus() {
@@ -633,6 +633,8 @@ export function VenuesPanel() {
   }
 
   return (
+    <div className="flex flex-col gap-6">
+    <AccountsCard />
     <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
       <Card title={f.id ? "Edit venue" : "New venue"} aside={f.id && <button className="btn btn-line" onClick={() => setF(EMPTY_VENUE)}>New instead</button>}>
         <form onSubmit={save} className="flex flex-col gap-3">
@@ -694,6 +696,7 @@ export function VenuesPanel() {
           );
         })}
       </div>
+    </div>
     </div>
   );
 }
@@ -1028,6 +1031,8 @@ export function SettingsPanel() {
           {s.node}
         </form>
       </Card>
+      <div className="flex flex-col gap-6">
+      <PricingCard />
       <Card title="Where these appear">
         <ul className="list-disc space-y-2 pl-5 text-sm text-[#3b4745]">
           <li>The <strong>Terms</strong> and <strong>Privacy</strong> links at the bottom of the sign-in screen, the setup screen and the game screen open your links if set, otherwise the built-in pages.</li>
@@ -1035,6 +1040,7 @@ export function SettingsPanel() {
           <li>Every change here is recorded in the Audit tab.</li>
         </ul>
       </Card>
+      </div>
     </div>
   );
 }
@@ -1090,6 +1096,436 @@ export function AuditPanel() {
           {rows.length === 0 && <tr><td colSpan={4} className="py-6 text-center text-[#5b6865]">Nothing recorded yet.</td></tr>}
         </tbody>
       </table>
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------- question packs
+const EMPTY_TPL = { id: "", pack: "", sport: "cricket", prompt: "", options: "Yes\nNo", points: 10, answer_window_s: 30 };
+
+export function PacksPanel() {
+  const [rows, setRows] = useState<QuestionTemplate[]>([]);
+  const [sport, setSport] = useState("cricket");
+  const [f, setF] = useState(EMPTY_TPL);
+  const s = useStatus();
+
+  const load = useCallback(async () => {
+    const { data } = await supabase().from("question_templates").select("*").order("pack").order("sort_order");
+    setRows((data as QuestionTemplate[]) ?? []);
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    const options = f.options.split("\n").map((o) => o.trim()).filter(Boolean);
+    if (options.length < 2 || options.length > 6) return s.fail("Give 2 to 6 options, one per line.");
+    const row = { pack: f.pack.trim(), sport: f.sport, prompt: f.prompt.trim(), options, points: f.points, answer_window_s: f.answer_window_s };
+    const { error } = f.id
+      ? await supabase().from("question_templates").update(row).eq("id", f.id)
+      : await supabase().from("question_templates").insert({ ...row, sort_order: rows.filter((r) => r.pack === row.pack).length + 1 });
+    if (error) return s.fail(error);
+    s.ok(f.id ? "Question updated." : "Question added to the pack.");
+    setF({ ...EMPTY_TPL, pack: f.pack, sport: f.sport });
+    load();
+  }
+
+  async function toggle(t: QuestionTemplate) {
+    const { error } = await supabase().from("question_templates").update({ is_active: !t.is_active }).eq("id", t.id);
+    if (error) return s.fail(error);
+    load();
+  }
+
+  const list = rows.filter((r) => r.sport === sport);
+  const packs = [...new Set(list.map((r) => r.pack))];
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
+      <Card title={f.id ? "Edit pack question" : "Add a pack question"} aside={f.id && <button className="btn btn-line" onClick={() => setF(EMPTY_TPL)}>New instead</button>}>
+        <form onSubmit={save} className="flex flex-col gap-3">
+          <label>Sport
+            <select value={f.sport} onChange={(e) => setF({ ...f, sport: e.target.value })}>
+              <option value="cricket">Cricket</option><option value="football">Football</option>
+            </select>
+          </label>
+          <label>Pack name<input required list="pack-names" value={f.pack} onChange={(e) => setF({ ...f, pack: e.target.value })} placeholder="Over by over" /></label>
+          <datalist id="pack-names">{[...new Set(rows.map((r) => r.pack))].map((p) => <option key={p} value={p} />)}</datalist>
+          <label>Question<input required maxLength={160} value={f.prompt} onChange={(e) => setF({ ...f, prompt: e.target.value })} placeholder="Over {over}: how many runs?" /></label>
+          <label>Options, one per line<textarea rows={4} value={f.options} onChange={(e) => setF({ ...f, options: e.target.value })} /></label>
+          <p className="text-xs text-[#5b6865]">{"{over}"} becomes the current over. {"{home}"} and {"{away}"} become the teams from the match title (&quot;Mumbai vs Chennai&quot;).</p>
+          <div className="grid grid-cols-2 gap-3">
+            <label>Points<input type="number" min={1} max={1000} value={f.points} onChange={(e) => setF({ ...f, points: Number(e.target.value) })} /></label>
+            <label>Answer window
+              <select value={f.answer_window_s} onChange={(e) => setF({ ...f, answer_window_s: Number(e.target.value) })}>
+                {[15, 20, 30, 45, 60, 90].map((x) => <option key={x} value={x}>{x} seconds</option>)}
+              </select>
+            </label>
+          </div>
+          <button className="btn btn-dark">{f.id ? "Save" : "Add to pack"}</button>
+          {s.node}
+        </form>
+      </Card>
+      <Card
+        title="Question packs"
+        aside={
+          <select className="!w-40" value={sport} onChange={(e) => setSport(e.target.value)}>
+            <option value="cricket">Cricket</option><option value="football">Football</option>
+          </select>
+        }
+      >
+        <p className="mb-3 text-sm text-[#5b6865]">The Live tab cycles through a pack in order. Paused questions are skipped.</p>
+        {packs.map((p) => (
+          <div key={p} className="mb-4">
+            <h3 className="mb-1 font-bold">{p}</h3>
+            <ul className="flex flex-col divide-y divide-[#eef1ef] rounded-lg border border-[#eef1ef]">
+              {list.filter((r) => r.pack === p).map((t) => (
+                <li key={t.id} className={`flex items-center justify-between gap-3 px-3 py-2 text-sm ${t.is_active ? "" : "opacity-50"}`}>
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold">{t.prompt}</span>
+                    <span className="block truncate text-[#5b6865]">{t.options.join(" / ")} · {t.points} pts · {t.answer_window_s}s</span>
+                  </span>
+                  <span className="flex shrink-0 gap-2">
+                    <button className="btn btn-line !py-1" onClick={() => setF({ id: t.id, pack: t.pack, sport: t.sport, prompt: t.prompt, options: t.options.join("\n"), points: t.points, answer_window_s: t.answer_window_s })}>Edit</button>
+                    <button className="btn btn-line !py-1" onClick={() => toggle(t)}>{t.is_active ? "Pause" : "Use"}</button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+        {packs.length === 0 && <p className="text-sm text-[#5b6865]">No packs for this sport yet.</p>}
+      </Card>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- sponsors + city seasons
+const EMPTY_SPONSOR = { id: "", name: "", logo_url: "", tagline: "", link_url: "" };
+type SponsorStat = { sponsor_id: string; sponsor: string; questions: number; plays: number; players: number; venues: number; matches: number };
+
+export function SponsorsPanel({ isAdmin }: { isAdmin: boolean }) {
+  const [rows, setRows] = useState<Sponsor[]>([]);
+  const [stats, setStats] = useState<SponsorStat[]>([]);
+  const [days, setDays] = useState(30);
+  const [f, setF] = useState(EMPTY_SPONSOR);
+  const s = useStatus();
+
+  const load = useCallback(async () => {
+    const sb = supabase();
+    const [{ data }, { data: st }] = await Promise.all([
+      sb.from("sponsors").select("*").order("name"),
+      sb.rpc("sponsor_report", { p_from: new Date(Date.now() - days * 86400000).toISOString(), p_to: new Date().toISOString() }),
+    ]);
+    setRows((data as Sponsor[]) ?? []);
+    setStats((st as SponsorStat[]) ?? []);
+  }, [days]);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    const clean = (v: string) => v.trim() || null;
+    const row = { name: f.name.trim(), logo_url: clean(f.logo_url), tagline: clean(f.tagline), link_url: clean(f.link_url) };
+    const { error } = f.id ? await supabase().from("sponsors").update(row).eq("id", f.id) : await supabase().from("sponsors").insert(row);
+    if (error) return s.fail(error.message.includes("url") ? "Links must start with https://" : error);
+    s.ok("Sponsor saved.");
+    setF(EMPTY_SPONSOR);
+    load();
+  }
+
+  const stat = (id: string) => stats.find((x) => x.sponsor_id === id);
+  const csv = () => {
+    const lines = [["Sponsor", "Questions", "Plays", "Unique players", "Venues", "Matches"], ...stats.map((r) => [r.sponsor, r.questions, r.plays, r.players, r.venues, r.matches])];
+    const blob = new Blob([lines.map((l) => l.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n")], { type: "text/csv" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `sponsor-report-${days}d.csv`;
+    a.click();
+  };
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
+        <Card title={f.id ? "Edit sponsor" : "New sponsor"} aside={f.id && <button className="btn btn-line" onClick={() => setF(EMPTY_SPONSOR)}>New instead</button>}>
+          <form onSubmit={save} className="flex flex-col gap-3">
+            <label>Brand name<input required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="e.g. a cab app" /></label>
+            <label>Logo link (https, optional)<input type="url" value={f.logo_url} onChange={(e) => setF({ ...f, logo_url: e.target.value })} /></label>
+            <label>Tagline (optional)<input maxLength={90} value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} placeholder="Get home safe after the match" /></label>
+            <label>Website (https, optional)<input type="url" value={f.link_url} onChange={(e) => setF({ ...f, link_url: e.target.value })} /></label>
+            <button className="btn btn-dark">Save sponsor</button>
+            {s.node}
+            <p className="text-xs text-[#5b6865]">Pick a sponsor for a whole match in the Live tab (&quot;Presented by&quot;) or for single overs. No alcohol brands: surrogate alcohol advertising rules apply.</p>
+          </form>
+        </Card>
+        <Card
+          title="Sponsor report"
+          aside={
+            <span className="flex gap-2">
+              <select className="!w-32" value={days} onChange={(e) => setDays(Number(e.target.value))}>
+                {[7, 30, 90, 365].map((d) => <option key={d} value={d}>Last {d} days</option>)}
+              </select>
+              <button className="btn btn-line" onClick={csv}>Export CSV</button>
+            </span>
+          }
+        >
+          <p className="mb-3 text-sm text-[#5b6865]">What each brand got: sponsored questions, answers given while their name was on screen, unique players and venues. Send this to the brand.</p>
+          <table className="w-full text-sm">
+            <thead className="text-left text-[#5b6865]">
+              <tr><th className="py-1">Sponsor</th><th>Questions</th><th>Plays</th><th>Players</th><th>Venues</th><th></th></tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const x = stat(r.id);
+                return (
+                  <tr key={r.id} className={`tabular border-t border-[#eef1ef] ${r.is_active ? "" : "opacity-50"}`}>
+                    <td className="py-2 font-semibold">{r.name}</td>
+                    <td>{x?.questions ?? 0}</td>
+                    <td>{x?.plays ?? 0}</td>
+                    <td>{x?.players ?? 0}</td>
+                    <td>{x?.venues ?? 0}</td>
+                    <td className="text-right">
+                      <button className="btn btn-line !py-1" onClick={() => setF({ id: r.id, name: r.name, logo_url: r.logo_url ?? "", tagline: r.tagline ?? "", link_url: r.link_url ?? "" })}>Edit</button>{" "}
+                      <button className="btn btn-line !py-1" onClick={async () => { await supabase().from("sponsors").update({ is_active: !r.is_active }).eq("id", r.id); load(); }}>
+                        {r.is_active ? "Pause" : "Use"}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+              {rows.length === 0 && <tr><td colSpan={6} className="py-6 text-center text-[#5b6865]">No sponsors yet.</td></tr>}
+            </tbody>
+          </table>
+        </Card>
+      </div>
+      <SeasonsCard sponsors={rows} isAdmin={isAdmin} />
+    </div>
+  );
+}
+
+const EMPTY_SEASON = { id: "", name: "", city: "Mumbai", starts_on: "", ends_on: "", prize_text: "", prize_terms_url: "", sponsor_id: "" };
+
+function SeasonsCard({ sponsors, isAdmin }: { sponsors: Sponsor[]; isAdmin: boolean }) {
+  const [rows, setRows] = useState<Season[]>([]);
+  const [f, setF] = useState(EMPTY_SEASON);
+  const s = useStatus();
+  const load = useCallback(async () => {
+    const { data } = await supabase().from("seasons").select("*").order("starts_on", { ascending: false });
+    setRows((data as Season[]) ?? []);
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (f.prize_text.trim() && !f.prize_terms_url.trim() && !confirm("A prize without a terms link is risky. Have a lawyer approve prize terms first. Save anyway?")) return;
+    const clean = (v: string) => v.trim() || null;
+    const row = { name: f.name.trim(), city: f.city.trim(), starts_on: f.starts_on, ends_on: f.ends_on, prize_text: clean(f.prize_text), prize_terms_url: clean(f.prize_terms_url), sponsor_id: f.sponsor_id || null };
+    const { error } = f.id ? await supabase().from("seasons").update(row).eq("id", f.id) : await supabase().from("seasons").insert(row);
+    if (error) return s.fail(error.message.includes("dates") ? "The end date must be after the start date." : error.message.includes("url") ? "Links must start with https://" : error);
+    s.ok("Season saved.");
+    setF(EMPTY_SEASON);
+    load();
+  }
+
+  return (
+    <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
+      <Card title={f.id ? "Edit city season" : "New city season"}>
+        {!isAdmin ? (
+          <p className="text-sm text-[#5b6865]">Only admins can set up city seasons.</p>
+        ) : (
+          <form onSubmit={save} className="flex flex-col gap-3">
+            <label>Name<input required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Mumbai IPL 2027 season" /></label>
+            <label>City<input required value={f.city} onChange={(e) => setF({ ...f, city: e.target.value })} /></label>
+            <div className="grid grid-cols-2 gap-3">
+              <label>Starts<input required type="date" value={f.starts_on} onChange={(e) => setF({ ...f, starts_on: e.target.value })} /></label>
+              <label>Ends<input required type="date" value={f.ends_on} onChange={(e) => setF({ ...f, ends_on: e.target.value })} /></label>
+            </div>
+            <label>Season prize (optional)<input maxLength={160} value={f.prize_text} onChange={(e) => setF({ ...f, prize_text: e.target.value })} placeholder="Top 3 win a ride voucher from [sponsor]" /></label>
+            <label>Prize terms link (https)<input type="url" value={f.prize_terms_url} onChange={(e) => setF({ ...f, prize_terms_url: e.target.value })} /></label>
+            <label>Prize sponsor
+              <select value={f.sponsor_id} onChange={(e) => setF({ ...f, sponsor_id: e.target.value })}>
+                <option value="">None</option>
+                {sponsors.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+              </select>
+            </label>
+            <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              Have a lawyer approve the prize terms before showing a prize. The leaderboard works without one.
+            </p>
+            <button className="btn btn-dark">Save season</button>
+            {s.node}
+          </form>
+        )}
+      </Card>
+      <Card title="City seasons">
+        <p className="mb-3 text-sm text-[#5b6865]">Players in that city see a &quot;City season&quot; tab in Ranks: points from every match at every venue in the city, between these dates.</p>
+        <ul className="flex flex-col gap-2">
+          {rows.map((r) => (
+            <li key={r.id} className={`flex items-center justify-between gap-3 rounded-lg border border-[#eef1ef] px-3 py-2 text-sm ${r.is_active ? "" : "opacity-50"}`}>
+              <span>
+                <span className="block font-semibold">{r.name} · {r.city}</span>
+                <span className="block text-[#5b6865]">{r.starts_on} to {r.ends_on}{r.prize_text ? ` · Prize: ${r.prize_text}` : ""}</span>
+              </span>
+              {isAdmin && (
+                <span className="flex shrink-0 gap-2">
+                  <button className="btn btn-line !py-1" onClick={() => setF({ id: r.id, name: r.name, city: r.city, starts_on: r.starts_on, ends_on: r.ends_on, prize_text: r.prize_text ?? "", prize_terms_url: r.prize_terms_url ?? "", sponsor_id: r.sponsor_id ?? "" })}>Edit</button>
+                  <button className="btn btn-line !py-1" onClick={async () => { await supabase().from("seasons").update({ is_active: !r.is_active }).eq("id", r.id); load(); }}>{r.is_active ? "Hide" : "Show"}</button>
+                </span>
+              )}
+            </li>
+          ))}
+          {rows.length === 0 && <li className="py-4 text-center text-sm text-[#5b6865]">No seasons yet.</li>}
+        </ul>
+      </Card>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- venue accounts (signups, plans, billing)
+type AccountRow = VenueAccount & { venues: { name: string; slug: string; city: string; is_active: boolean } };
+type PaymentRow = { id: string; venue_id: string; plan: VenuePlan; amount_paise: number; status: string; created_at: string; paid_at: string | null };
+const PLAN_LABEL: Record<VenuePlan, string> = { pilot: "Free pilot", season: "Season pass", per_reward: "Pay per reward" };
+const STATUS_LABEL: Record<BillingStatus, string> = { pending: "Waiting for approval", trial: "Trial", active: "Active", past_due: "Payment due", cancelled: "Cancelled" };
+
+export function AccountsCard() {
+  const [rows, setRows] = useState<AccountRow[]>([]);
+  const [payments, setPayments] = useState<PaymentRow[]>([]);
+  const s = useStatus();
+  const load = useCallback(async () => {
+    const sb = supabase();
+    const [{ data }, { data: p }] = await Promise.all([
+      sb.from("venue_accounts").select("*, venues(name, slug, city, is_active)").order("created_at", { ascending: false }),
+      sb.from("payments").select("*").order("created_at", { ascending: false }).limit(50),
+    ]);
+    setRows((data as AccountRow[]) ?? []);
+    setPayments((p as PaymentRow[]) ?? []);
+  }, []);
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function patch(r: AccountRow, acc: Partial<VenueAccount>, activeVenue?: boolean, msg = "Saved.") {
+    const sb = supabase();
+    const { error } = await sb.from("venue_accounts").update({ ...acc, updated_at: new Date().toISOString() }).eq("venue_id", r.venue_id);
+    if (error) return s.fail(error);
+    if (activeVenue !== undefined) {
+      const { error: e2 } = await sb.from("venues").update({ is_active: activeVenue }).eq("id", r.venue_id);
+      if (e2) return s.fail(e2);
+    }
+    s.ok(msg);
+    load();
+  }
+
+  const pending = rows.filter((r) => r.status === "pending");
+  const inDays = (n: number) => new Date(Date.now() + n * 86400000).toISOString().slice(0, 10);
+
+  return (
+    <Card title="Venue accounts and billing" aside={pending.length > 0 && <span className="rounded-full bg-amber-100 px-3 py-1 text-sm font-semibold text-amber-900">{pending.length} waiting</span>}>
+      {s.node}
+      <table className="mt-2 w-full text-sm">
+        <thead className="text-left text-[#5b6865]">
+          <tr><th className="py-1">Venue</th><th>Contact</th><th>Plan</th><th>Status</th><th>Paid until</th><th></th></tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.venue_id} className={`border-t border-[#eef1ef] align-top ${r.status === "pending" ? "bg-amber-50" : ""}`}>
+              <td className="py-2">
+                <span className="block font-semibold">{r.venues?.name}</span>
+                <span className="block text-[#5b6865]">{r.venues?.city}{r.venues && !r.venues.is_active ? " · not live" : ""}</span>
+              </td>
+              <td className="text-[#3b4745]">
+                {r.contact_name}<br />{r.contact_phone}<br />{r.contact_email}
+              </td>
+              <td>
+                <select className="!w-36 !py-1" value={r.plan} onChange={(e) => patch(r, { plan: e.target.value as VenuePlan })}>
+                  {(Object.keys(PLAN_LABEL) as VenuePlan[]).map((p) => <option key={p} value={p}>{PLAN_LABEL[p]}</option>)}
+                </select>
+              </td>
+              <td>{STATUS_LABEL[r.status]}</td>
+              <td>{r.paid_until ?? "–"}</td>
+              <td className="flex flex-wrap justify-end gap-1 py-2">
+                {r.status === "pending" && (
+                  <>
+                    <button className="btn btn-go !py-1" onClick={() => patch(r, { status: "trial", approved_at: new Date().toISOString(), paid_until: inDays(14) }, true, "Approved: 14-day trial, venue is live.")}>
+                      Approve, 14-day trial
+                    </button>
+                    <button className="btn btn-line !py-1" onClick={() => confirm("Reject this signup? The venue stays offline.") && patch(r, { status: "cancelled" }, false, "Rejected.")}>
+                      Reject
+                    </button>
+                  </>
+                )}
+                {r.status !== "pending" && (
+                  <>
+                    <button className="btn btn-line !py-1" onClick={() => { const d = prompt("Paid until (YYYY-MM-DD)", r.paid_until ?? inDays(90)); if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) patch(r, { status: "active", paid_until: d }, true, "Marked as paid."); }}>
+                      Mark paid
+                    </button>
+                    {r.status !== "cancelled" ? (
+                      <button className="btn btn-line !py-1" onClick={() => confirm("Pause this venue? Players can't check in until you turn it back on.") && patch(r, { status: "cancelled" }, false, "Venue paused.")}>Pause</button>
+                    ) : (
+                      <button className="btn btn-line !py-1" onClick={() => patch(r, { status: "active" }, true, "Venue back on.")}>Turn back on</button>
+                    )}
+                  </>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {payments.length > 0 && (
+        <>
+          <h3 className="mt-5 font-bold">Recent online payments</h3>
+          <ul className="mt-2 flex flex-col gap-1 text-sm">
+            {payments.map((p) => (
+              <li key={p.id} className="flex justify-between rounded bg-[#f6f8f7] px-3 py-1.5">
+                <span>{rows.find((r) => r.venue_id === p.venue_id)?.venues?.name ?? "Venue"} · {PLAN_LABEL[p.plan]}</span>
+                <span className="tabular">₹{(p.amount_paise / 100).toLocaleString("en-IN")} · {p.status}{p.paid_at ? ` · ${new Date(p.paid_at).toLocaleDateString("en-IN")}` : ""}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </Card>
+  );
+}
+
+export function PricingCard() {
+  const [f, setF] = useState<{ season_price_inr: number; per_reward_price_inr: number; season_ends_on: string; signup_open: boolean } | null>(null);
+  const s = useStatus();
+  useEffect(() => {
+    supabase()
+      .from("app_settings")
+      .select("season_price_inr, per_reward_price_inr, season_ends_on, signup_open")
+      .maybeSingle()
+      .then(({ data }) => data && setF({ ...data, season_ends_on: data.season_ends_on ?? "" }));
+  }, []);
+  if (!f) return null;
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    const { error } = await supabase()
+      .from("app_settings")
+      .update({ season_price_inr: f!.season_price_inr, per_reward_price_inr: f!.per_reward_price_inr, season_ends_on: f!.season_ends_on || null, signup_open: f!.signup_open, updated_at: new Date().toISOString() })
+      .eq("id", true);
+    if (error) return s.fail(error);
+    s.ok("Pricing saved.");
+  }
+  return (
+    <Card title="Venue pricing">
+      <form onSubmit={save} className="flex flex-col gap-3">
+        <div className="grid grid-cols-2 gap-3">
+          <label>Season pass (₹, plus GST)<input type="number" min={0} value={f.season_price_inr} onChange={(e) => setF({ ...f, season_price_inr: Number(e.target.value) })} /></label>
+          <label>Per redeemed reward (₹)<input type="number" min={0} value={f.per_reward_price_inr} onChange={(e) => setF({ ...f, per_reward_price_inr: Number(e.target.value) })} /></label>
+        </div>
+        <label>Season pass valid until<input type="date" value={f.season_ends_on} onChange={(e) => setF({ ...f, season_ends_on: e.target.value })} /></label>
+        <p className="text-xs text-[#5b6865]">Leave empty and a season pass lasts 90 days from payment.</p>
+        <label className="!flex items-center gap-2">
+          <input type="checkbox" className="!w-auto" checked={f.signup_open} onChange={(e) => setF({ ...f, signup_open: e.target.checked })} />
+          Venues can sign up themselves at /partner
+        </label>
+        <button className="btn btn-dark">Save pricing</button>
+        {s.node}
+      </form>
     </Card>
   );
 }

@@ -31,6 +31,9 @@ export function friendlyError(raw: unknown): string {
     cannot_lock: "Only live questions can be locked.",
     cannot_resolve: "Only live or locked questions can be resolved.",
     cannot_void: "This question can't be voided.",
+    double_used: "You've already used your 2x points this match.",
+    invalid_table: "Pick a table number from the list.",
+    billing_not_configured: "Online payment isn't switched on yet. We'll send you an invoice instead.",
   };
   for (const key of Object.keys(map)) if (msg.includes(key)) return map[key];
   return msg || "Something went wrong. Try again.";
@@ -43,7 +46,7 @@ export const HOW_TO_PLAY = [
   },
   {
     title: "Watch for a question",
-    body: "During the match, a prediction appears on your phone. You don't need to refresh.",
+    body: "During the match, a prediction appears on your phone, often before every over. You don't need to refresh.",
   },
   {
     title: "Lock in before the timer ends",
@@ -54,8 +57,19 @@ export const HOW_TO_PLAY = [
     body: "Correct predictions add points and move you up this bar's leaderboard.",
   },
   {
+    title: "Go on a streak",
+    body: "From your 3rd right answer in a row, every right answer earns 10 bonus points. A wrong answer resets the streak; skipping a question doesn't.",
+  },
+  {
+    title: "Use your 2x once a match",
+    body: "Feeling sure? Switch on 2x before you answer and that question's points are doubled if you're right. You get one per match.",
+  },
+  {
+    title: "Play as a table",
+    body: "Pick your table number and your table's best four scores are added up on the table leaderboard.",
+  },
+  {
     title: "Collect rewards",
-    body: "Some questions carry a reward. The fastest correct players win it, and it's saved to your wallet.",
+    body: "Right answers can win rewards from the venue and its partners. They're saved to your wallet with a code to show staff.",
   },
 ];
-
