@@ -11,7 +11,9 @@ function walk(p) {
   const s = statSync(p);
   if (s.isDirectory()) return readdirSync(p).forEach((f) => walk(join(p, f)));
   if (!/\.(tsx?|mjs|css|sql|json|md)$/.test(p)) return;
-  readFileSync(p, "utf8")
+  const text = readFileSync(p, "utf8");
+  if (text.slice(0, 600).includes("check-copy:allow (this file")) return; // blocklists and prompts
+  text
     .split("\n")
     .forEach((line, i) => {
       if (line.includes("check-copy:allow")) return;

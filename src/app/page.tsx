@@ -13,9 +13,13 @@ export default function Home() {
         <p className="mt-5 text-lg text-ink/75">
           Free live predictions during the match. No app to download, nothing to buy.
         </p>
+        <Link href="/play" className="mt-10 block rounded-2xl bg-brand px-5 py-5 font-display text-2xl font-bold text-on-brand">
+          Play trivia with friends
+          <span className="block font-sans text-base font-normal opacity-80">Cricket, Bollywood, current affairs or any topic. Rooms with your own code.</span>
+        </Link>
         <Link
           href="/wallet"
-          className="mt-10 inline-block rounded-xl border border-ink/25 px-5 py-3 font-semibold"
+          className="mt-4 inline-block rounded-xl border border-ink/25 px-5 py-3 font-semibold"
         >
           Open my wallet
         </Link>

@@ -77,8 +77,9 @@ export function MoreTab({
 
       {section === "how" && (
         <ol className="flex flex-col gap-5">
-          <li>
+          <li className="flex flex-col gap-3">
             <GhostButton onClick={onReplayTour}>Watch the walkthrough again</GhostButton>
+            <a href="/play" className="rounded-xl border border-ink/25 px-4 py-3 text-center font-semibold">Trivia rooms with friends</a>
           </li>
           {HOW_TO_PLAY.map((s, i) => (
             <li key={s.title} className="flex gap-4">

@@ -10,6 +10,7 @@ import {
   MatchesPanel,
   OffersPanel,
   PacksPanel,
+  TriviaPanel,
   SponsorsPanel,
   AuditPanel,
   RewardsPanel,
@@ -25,6 +26,7 @@ const TABS = [
   { key: "packs", label: "Packs", admin: false },
   { key: "rewards", label: "Rewards", admin: false },
   { key: "sponsors", label: "Sponsors", admin: false },
+  { key: "trivia", label: "Trivia rooms", admin: false },
   { key: "themes", label: "Themes", admin: false },
   { key: "offers", label: "Offers", admin: false },
   { key: "analytics", label: "Analytics", admin: false },
@@ -77,6 +79,7 @@ function Console({ staff }: { staff: StaffMember }) {
         {tab === "packs" && <PacksPanel />}
         {tab === "rewards" && <RewardsPanel />}
         {tab === "sponsors" && <SponsorsPanel isAdmin={staff.role === "admin"} />}
+        {tab === "trivia" && <TriviaPanel isAdmin={staff.role === "admin"} />}
         {tab === "themes" && <ThemesPanel />}
         {tab === "offers" && <OffersPanel />}
         {tab === "analytics" && <AnalyticsPanel />}

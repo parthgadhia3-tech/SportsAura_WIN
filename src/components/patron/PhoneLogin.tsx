@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { ErrorNote, Field, GhostButton, PrimaryButton, inputClass } from "./ui";
 import { LegalLinks } from "@/components/LegalLinks";
 
-export function PhoneLogin({ venueName }: { venueName: string }) {
+export function PhoneLogin({ venueName, heading, intro }: { venueName?: string; heading?: string; intro?: string }) {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [sent, setSent] = useState(false);
@@ -43,12 +43,12 @@ export function PhoneLogin({ venueName }: { venueName: string }) {
   return (
     <div className="mx-auto flex min-h-dvh max-w-md flex-col justify-end gap-8 px-6 pb-10 pt-16">
       <div>
-        <p className="text-lg text-ink/70">You&apos;re at {venueName}</p>
+        {venueName && <p className="text-lg text-ink/70">You&apos;re at {venueName}</p>}
         <h1 className="mt-1 font-display text-5xl font-bold leading-[0.95]">
-          Call the next play. Win the room.
+          {heading ?? "Call the next play. Win the room."}
         </h1>
         <p className="mt-4 text-[17px] text-ink/75">
-          Free live predictions during the match. Score points, climb the bar&apos;s leaderboard and win rewards.
+          {intro ?? "Free live predictions during the match. Score points, climb the bar's leaderboard and win rewards."}
         </p>
       </div>
 

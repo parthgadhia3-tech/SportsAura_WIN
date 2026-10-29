@@ -57,3 +57,15 @@ export async function markOrderPaid(db: StaffCaller["db"], orderId: string, paym
   await db.from("venues").update({ is_active: true }).eq("id", pay.venue_id);
   return true;
 }
+
+/** A signed-in player (phone login + finished onboarding). */
+export async function playerCaller(request: Request): Promise<{ db: StaffCaller["db"]; userId: string } | Response> {
+  const token = request.headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!token) return Response.json({ error: "Sign in again." }, { status: 401 });
+  const db = supabaseAdmin();
+  const { data } = await db.auth.getUser(token);
+  if (!data.user) return Response.json({ error: "Sign in again." }, { status: 401 });
+  const { data: u } = await db.from("users").select("id").eq("id", data.user.id).is("deleted_at", null).maybeSingle();
+  if (!u) return Response.json({ error: "Finish setting up your profile first." }, { status: 403 });
+  return { db, userId: u.id };
+}

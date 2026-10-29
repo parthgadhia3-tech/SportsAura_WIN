@@ -13,7 +13,7 @@ export interface LegalSettings {
   support_email: string | null;
 }
 
-export const LEGAL_UPDATED = "22 October 2026";
+export const LEGAL_UPDATED = "30 October 2026";
 export const LEGAL_VERSION = "2026-10-22";
 
 export type LegalSection = { heading: string; paras: string[] };
@@ -61,7 +61,7 @@ export function termsOfUse(s: LegalSettings | null): LegalSection[] {
       paras: [
         "During a match, the game host sends prediction questions. You can answer each question once, before its timer runs out, and you can't change your answer.",
         "The host settles each question based on what happens in the match. If a question can't be settled fairly (for example because of a broadcast delay, an unclear outcome or a technical problem), the host may lock it early or void it, and no points are awarded for a voided question.",
-        "The host's decision on results is final, subject to the complaint process in section 11.",
+        "The host's decision on results is final, subject to the complaint process in section 12.",
         "Bonus points, such as streak bonuses and the once-per-match 2x pick, are explained in How to play. Like all points, they have no cash value.",
       ],
     },
@@ -76,7 +76,16 @@ export function termsOfUse(s: LegalSettings | null): LegalSection[] {
       ],
     },
     {
-      heading: "6. Checking in and fair play",
+      heading: "6. Trivia rooms and AI-written questions",
+      paras: [
+        "You can create or join private trivia rooms and the daily quiz, at a venue or anywhere else. Rooms are free, and points in rooms have no value and never turn into rewards unless a venue says so.",
+        "Some questions are written by artificial intelligence. Every one is checked by rules and by a separate, independent AI check before it is used, and current affairs questions must come from a named news source. Even so, a question can occasionally be wrong. If you think it is, tap “Wrong answer?”. When two players report a question, we remove it and take its points out of the game.",
+        "If you type your own topic, keep it respectful. We may refuse topics about religion, caste, party politics, sexual content, violence, alcohol, gambling or any real person's private life. Don't type personal information into a topic.", // check-copy:allow (legal)
+        "Room names and codes are chosen by players and must not be offensive or impersonate anyone. Nobody may play for money or anything of value, inside or outside the app.",
+      ],
+    },
+    {
+      heading: "7. Checking in and fair play",
       paras: [
         "To play, you check in by scanning the code on the venue's screen, by a location check, or with the venue PIN. These exist to make sure only people at the venue take part.",
         "You must not share check-in codes or PINs with people outside the venue, use more than one account, use automated tools, or interfere with the game.",
@@ -84,41 +93,41 @@ export function termsOfUse(s: LegalSettings | null): LegalSection[] {
       ],
     },
     {
-      heading: "7. Drink responsibly",
+      heading: "8. Drink responsibly",
       paras: [
         "Playing never requires drinking. Please drink responsibly and never drink and drive.",
       ],
     },
     {
-      heading: "8. Your account",
+      heading: "9. Your account",
       paras: [
         "You sign in with your mobile number and a one-time code. Keep your phone secure, because anyone with access to it may be able to use your account.",
         "You can delete your account at any time from More, then Me, then Delete my account and data.",
       ],
     },
     {
-      heading: "9. Names, brands and content",
+      heading: "10. Names, brands and content",
       paras: [
         "Team, league, tournament and brand names are used only to describe matches and offers and belong to their owners. SportsAura is not affiliated with, endorsed or sponsored by any league, team or broadcaster.",
         "The SportsAura app, design and content belong to us. You may use them only to play the game.",
       ],
     },
     {
-      heading: "10. Availability and liability",
+      heading: "11. Availability and liability",
       paras: [
         "We work to keep SportsAura running smoothly but can't promise it will always be available or error-free, for example if the venue's internet or the broadcast is interrupted.",
         "To the extent the law allows, we are not responsible for rewards provided by venues or brands, for indirect losses, or for losses caused by events outside our reasonable control. Nothing in these terms limits rights you have under the Consumer Protection Act, 2019 or other law that can't be excluded.",
       ],
     },
     {
-      heading: "11. Complaints and grievances",
+      heading: "12. Complaints and grievances",
       paras: [
         `If you have a complaint about the game, a result, a reward or your data, contact ${w.contact}. We will acknowledge your complaint within 24 hours and aim to resolve it within 15 days.`,
         "If you are not satisfied with our response, you may escalate as allowed under applicable law, including to the Online Gaming Authority of India for gaming matters or the Data Protection Board of India for personal data matters.",
       ],
     },
     {
-      heading: "12. Changes, suspension and law",
+      heading: "13. Changes, suspension and law",
       paras: [
         "We may update these terms. If the changes are significant, we will tell you in the app before they apply, and continuing to play means you accept them.",
         "We may suspend or end the game at any venue or for any match. These terms are governed by the laws of India, and the courts at Mumbai, Maharashtra have jurisdiction, subject to any rights you have to bring a complaint elsewhere.",
@@ -144,6 +153,7 @@ export function privacyNotice(s: LegalSettings | null): LegalSection[] {
         "Your mobile number (to sign you in), your display name, your age confirmations, and the dates you agreed to our terms, location check and (if you chose it) club offers.",
         "Check-in results: the venue, the match, how you checked in, and if you used location, your approximate distance from the venue. We never store your GPS coordinates.",
         "Your answers, points, leaderboard positions, rewards won and redeemed, and when you open a brand reward link (including your browser type).",
+        "If you play trivia rooms: room names and codes, who is in each room, your answers, scores, reactions and any question reports, and topics you type for AI questions.",
         "Basic technical logs needed to keep the service secure.",
       ],
     },
@@ -162,7 +172,8 @@ export function privacyNotice(s: LegalSettings | null): LegalSection[] {
       paras: [
         "Other players and the venue's screen see only your display name and points. Staff at the venue where you play see your display name, points, how you checked in and the rewards you redeem there.",
         "Brands do not receive your personal data from us. If you open a brand's link, that brand's own privacy policy applies to what you share with them.",
-        "We use service providers to run SportsAura: Supabase (database, hosted in Mumbai, India), Vercel (website hosting) and Twilio (sending sign-in codes by SMS), which may process data outside India. They act on our instructions and must protect your data.",
+        "We use service providers to run SportsAura: Supabase (database, hosted in Mumbai, India), Vercel (website hosting), Twilio (sending sign-in codes by SMS) and Anthropic (writing and checking trivia questions with AI), which may process data outside India. They act on our instructions and must protect your data.",
+        "When you type a topic for an AI trivia room, only the topic text is sent to Anthropic, never your name, number or other personal data.",
         "We do not sell your personal data. We may disclose data where the law requires it.",
       ],
     },
@@ -170,7 +181,7 @@ export function privacyNotice(s: LegalSettings | null): LegalSection[] {
       heading: "5. How long we keep it",
       paras: [
         "Your account and game history are kept until you delete your account, or for up to 3 years after your last activity.",
-        "Check-in tickets are deleted within a day. Security logs and reward click records are kept for up to 1 year.",
+        "Check-in tickets are deleted within a day. Security logs and reward click records are kept for up to 1 year. Trivia rooms and their answers are kept for up to 1 year.",
         "When you delete your account, your profile, answers, points, check-ins and rewards are deleted. Reward click counts are kept only without your identity.",
       ],
     },

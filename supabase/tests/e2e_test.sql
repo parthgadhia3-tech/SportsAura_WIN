@@ -583,4 +583,133 @@ reset role;
 do $$ begin assert (select count(*) from public.payments) = 0, 'manager cannot insert payments'; end $$;
 \echo GROWTH_OK
 
+-- =====================================================================
+-- Rooms: classic scoring, secrecy, reports, hot seat, pass the phone, daily
+-- =====================================================================
+set role authenticated;
+select t_as('11111111-0000-0000-0000-000000000001');   -- Asha hosts
+do $$ begin
+  assert room_code_available('ASHA-ROOM'), 'code free';
+  assert create_room('Asha room', 'asha-room', 'classic', array[(select id from public.trivia_categories where slug = 'cricket')], null, 5, 10) = 'ASHA-ROOM', 'room created';
+  assert not room_code_available('ASHA-ROOM'), 'code taken';
+end $$;
+select t_expect_error($$select create_room('x', 'ASHA-ROOM', 'classic', array[(select id from public.trivia_categories where slug = 'cricket')], null, 5, 10)$$, 'code_taken');
+do $$ begin assert (select count(*) from public.trivia_questions) = 0, 'players cannot read the question bank'; end $$;
+
+select t_as('11111111-0000-0000-0000-000000000002');   -- Bilal joins
+select join_room('asha-room') \g /dev/null
+select t_expect_error($$select start_room('ASHA-ROOM')$$, 'host_only');
+select t_as('11111111-0000-0000-0000-000000000004');   -- Dev is not in the room
+select t_expect_error($$select room_tick('ASHA-ROOM')$$, 'not_in_room');
+
+select t_as('11111111-0000-0000-0000-000000000001');
+do $$ declare st jsonb; begin
+  st := start_room('ASHA-ROOM');
+  assert st->>'status' = 'playing' and (st->>'total')::int = 5, 'started with 5 questions';
+  assert st->'current'->>'correct_option' is null, 'answer hidden before reveal';
+end $$;
+select t_expect_error($$select room_answer('ASHA-ROOM', 0::smallint)$$, 'question_closed');   -- 3-second countdown
+
+reset role;
+update public.room_questions set started_at = now() - interval '1 second'
+ where room_id = (select id from public.rooms where code = 'ASHA-ROOM') and idx = 0;
+create temp table t_right as
+  select q.correct_option as c from public.room_questions rq join public.trivia_questions q on q.id = rq.question_id
+   where rq.room_id = (select id from public.rooms where code = 'ASHA-ROOM') and rq.idx = 0;
+grant select on t_right to authenticated;
+set role authenticated;
+
+select t_as('11111111-0000-0000-0000-000000000001');
+select room_answer('ASHA-ROOM', (select c from t_right)) \g /dev/null
+select t_expect_error($$select room_answer('ASHA-ROOM', 0::smallint)$$, 'already_answered');
+select t_as('11111111-0000-0000-0000-000000000002');
+select room_answer('ASHA-ROOM', (((select c from t_right) + 1) % 4)::smallint) \g /dev/null
+do $$ declare st jsonb; begin
+  st := room_tick('ASHA-ROOM');   -- everyone answered: reveals at once
+  assert (st->'current'->>'revealed')::boolean, 'revealed when all answered';
+  assert (st->'current'->>'correct_option')::int = (select c from t_right), 'answer shown after reveal';
+  assert (select (p->>'score')::int from jsonb_array_elements(st->'players') p where p->>'name' = 'Asha') > 100, 'right + fast > 100';
+  assert (select (p->>'score')::int from jsonb_array_elements(st->'players') p where p->>'name' = 'Bilal') = 0, 'wrong = 0';
+end $$;
+
+-- two reports pull the question and take its points back out
+select report_question('ASHA-ROOM', 0, 'wrong answer') \g /dev/null
+select t_as('11111111-0000-0000-0000-000000000001');
+do $$ declare r jsonb; begin
+  r := report_question('ASHA-ROOM', 0, null);
+  assert (r->>'pulled')::boolean, 'second report pulls it';
+  assert (select (p->>'score')::int from jsonb_array_elements(room_tick('ASHA-ROOM')->'players') p where p->>'name' = 'Asha') = 0, 'points removed';
+end $$;
+reset role;
+do $$ begin
+  assert (select status from public.trivia_questions where id = (select question_id from public.room_questions rq join public.rooms r on r.id = rq.room_id where r.code = 'ASHA-ROOM' and idx = 0)) = 'pulled', 'pulled from the bank';
+end $$;
+-- next question opens 5 seconds after reveal
+update public.room_questions set revealed_at = now() - interval '6 seconds'
+ where room_id = (select id from public.rooms where code = 'ASHA-ROOM') and idx = 0;
+set role authenticated;
+select t_as('11111111-0000-0000-0000-000000000002');
+do $$ begin assert (room_tick('ASHA-ROOM')->>'idx')::int = 1, 'moved to question 2'; end $$;
+
+-- hot seat: hot player answers, others predict
+select t_as('11111111-0000-0000-0000-000000000001');
+select create_room('Hot', 'HOT-SEAT', 'hotseat', array[(select id from public.trivia_categories where slug = 'bollywood')], null, 4, 15) \g /dev/null
+select t_as('11111111-0000-0000-0000-000000000002');
+select join_room('HOT-SEAT') \g /dev/null
+select t_as('11111111-0000-0000-0000-000000000001');
+select start_room('HOT-SEAT') \g /dev/null
+reset role;
+update public.room_questions set started_at = now() - interval '1 second' where room_id = (select id from public.rooms where code = 'HOT-SEAT');
+drop table t_right;
+create temp table t_right as
+  select q.correct_option as c, rq.hot_player_id as hot, (select user_id from public.room_players where id = rq.hot_player_id) as hot_user
+    from public.room_questions rq join public.trivia_questions q on q.id = rq.question_id
+   where rq.room_id = (select id from public.rooms where code = 'HOT-SEAT') and rq.idx = 0;
+grant select on t_right to authenticated;
+set role authenticated;
+do $$
+declare hot_u uuid := (select hot_user from t_right); other_u uuid;
+begin
+  other_u := case when hot_u = '11111111-0000-0000-0000-000000000001' then '11111111-0000-0000-0000-000000000002'::uuid else '11111111-0000-0000-0000-000000000001'::uuid end;
+  perform set_config('request.jwt.claims', json_build_object('sub', other_u)::text, false);
+  begin
+    perform room_answer('HOT-SEAT', 0::smallint);
+    raise exception 'predictor should not pick an option';
+  exception when others then if sqlerrm not like '%invalid_option%' then raise; end if;
+  end;
+  perform room_answer('HOT-SEAT', null, null, true);           -- predicts "they'll get it"
+  perform set_config('request.jwt.claims', json_build_object('sub', hot_u)::text, false);
+  perform room_answer('HOT-SEAT', (select c from t_right));    -- and they do
+  assert (select (p->>'score')::int from jsonb_array_elements(room_tick('HOT-SEAT')->'players') p where (p->>'id')::uuid = (select hot from t_right)) = 200, 'hot seat right = 200';
+  perform set_config('request.jwt.claims', json_build_object('sub', other_u)::text, false);
+  assert (select (p->>'score')::int from jsonb_array_elements(room_tick('HOT-SEAT')->'players') p where (p->>'is_me')::boolean) = 50, 'right prediction = 50';
+end $$;
+
+-- pass the phone: guests on the host's phone, nobody else can join
+select t_as('11111111-0000-0000-0000-000000000002');
+select create_room('Table', 'PASS-ONE', 'pass', array[(select id from public.trivia_categories where slug = 'general')], null, 3, 20, null, array['Riya', 'Kabir']) \g /dev/null
+select t_as('11111111-0000-0000-0000-000000000001');
+select t_expect_error($$select join_room('PASS-ONE')$$, 'pass_mode_one_phone');
+select t_as('11111111-0000-0000-0000-000000000002');
+do $$ declare st jsonb; begin
+  st := start_room('PASS-ONE');
+  assert jsonb_array_length(st->'players') = 3, 'host + 2 guests';
+end $$;
+
+-- reactions show up in the room for everyone
+select t_as('11111111-0000-0000-0000-000000000001');
+select room_react('ASHA-ROOM', '🔥') \g /dev/null
+select t_expect_error($$select room_react('ASHA-ROOM', 'x')$$, 'check');
+select t_as('11111111-0000-0000-0000-000000000002');
+do $$ begin assert jsonb_array_length(room_tick('ASHA-ROOM')->'reactions') = 1, 'reaction visible'; end $$;
+
+-- daily quiz: one per day, same code on a second call, streak profile
+do $$ declare c1 text; c2 text; begin
+  c1 := start_daily(); c2 := start_daily();
+  assert c1 = c2 and c1 like 'DAY-%', 'one daily room per day';
+  assert (my_play_profile()->'today'->>'code') = c1, 'profile shows today';
+end $$;
+reset role;
+\echo ROOMS_OK
+
 \echo ALL_TESTS_PASSED

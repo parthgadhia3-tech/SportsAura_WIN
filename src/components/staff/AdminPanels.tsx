@@ -1141,6 +1141,8 @@ export function PacksPanel() {
   const packs = [...new Set(list.map((r) => r.pack))];
 
   return (
+    <div className="flex flex-col gap-6">
+    <AiPackWriter onSaved={load} />
     <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
       <Card title={f.id ? "Edit pack question" : "Add a pack question"} aside={f.id && <button className="btn btn-line" onClick={() => setF(EMPTY_TPL)}>New instead</button>}>
         <form onSubmit={save} className="flex flex-col gap-3">
@@ -1196,6 +1198,7 @@ export function PacksPanel() {
         ))}
         {packs.length === 0 && <p className="text-sm text-[#5b6865]">No packs for this sport yet.</p>}
       </Card>
+    </div>
     </div>
   );
 }
@@ -1527,5 +1530,317 @@ export function PricingCard() {
         {s.node}
       </form>
     </Card>
+  );
+}
+
+// ---------------------------------------------------------------- AI helpers
+export function useAiEnabled() {
+  const [on, setOn] = useState<boolean | null>(null);
+  useEffect(() => {
+    fetch("/api/ai/status")
+      .then((r) => r.json())
+      .then((d) => setOn(Boolean(d.enabled)))
+      .catch(() => setOn(false));
+  }, []);
+  return on;
+}
+
+export async function staffPost(path: string, body: unknown) {
+  const { data } = await supabase().auth.getSession();
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token ?? ""}` },
+    body: JSON.stringify(body),
+  });
+  return { ok: res.ok, body: (await res.json().catch(() => ({}))) as Record<string, unknown> };
+}
+
+type PackDraft = { prompt: string; options: string[]; points: number; answer_window_s: number; ok?: boolean; problem?: string; keep: boolean };
+
+function AiPackWriter({ onSaved }: { onSaved: () => void }) {
+  const ai = useAiEnabled();
+  const [f, setF] = useState({ title: "", sport: "cricket", context: "", count: 12, pack: "" });
+  const [items, setItems] = useState<PackDraft[]>([]);
+  const [busy, setBusy] = useState(false);
+  const s = useStatus();
+
+  async function write(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setItems([]);
+    const { ok, body } = await staffPost("/api/ai/pack", f);
+    setBusy(false);
+    if (!ok) return s.fail(String(body.error ?? "Couldn't write the pack."));
+    const list = (body.items as Omit<PackDraft, "keep">[]) ?? [];
+    setItems(list.map((x) => ({ ...x, keep: Boolean(x.ok) })));
+    s.ok(`${list.filter((x) => x.ok).length} of ${list.length} passed the review. Untick any you don't want.`);
+  }
+
+  async function save() {
+    const keep = items.filter((x) => x.keep);
+    const pack = f.pack.trim() || `${f.title.trim()} (AI)`.slice(0, 40);
+    const { error } = await supabase()
+      .from("question_templates")
+      .insert(keep.map((x, i) => ({ pack, sport: f.sport, prompt: x.prompt, options: x.options, points: x.points, answer_window_s: x.answer_window_s, sort_order: i + 1 })));
+    if (error) return s.fail(error);
+    s.ok(`Saved ${keep.length} questions to the pack “${pack}”. Pick it in the Live tab.`);
+    setItems([]);
+    onSaved();
+  }
+
+  return (
+    <Card title="Write a pack with AI">
+      {ai === false ? (
+        <p className="text-sm text-[#5b6865]">AI is off. Add ANTHROPIC_API_KEY in Vercel (Settings, Environment Variables) and redeploy to switch it on.</p>
+      ) : (
+        <>
+          <form onSubmit={write} className="grid gap-3 md:grid-cols-[1.2fr_120px_1.5fr_100px_auto] md:items-end">
+            <label>Match<input required value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="Mumbai vs Chennai" /></label>
+            <label>Sport
+              <select value={f.sport} onChange={(e) => setF({ ...f, sport: e.target.value })}><option value="cricket">Cricket</option><option value="football">Football</option></select>
+            </label>
+            <label>Notes (optional)<input value={f.context} onChange={(e) => setF({ ...f, context: e.target.value })} placeholder="Final at Wankhede, Mumbai batting first" /></label>
+            <label>How many
+              <select value={f.count} onChange={(e) => setF({ ...f, count: Number(e.target.value) })}>{[8, 12, 20, 30].map((n) => <option key={n}>{n}</option>)}</select>
+            </label>
+            <button className="btn btn-dark" disabled={busy}>{busy ? "Writing and reviewing…" : "Write questions"}</button>
+          </form>
+          <p className="mt-2 text-xs text-[#5b6865]">A second AI pass checks every question can be settled cleanly from the broadcast. You choose what to keep.</p>
+          {s.node}
+          {items.length > 0 && (
+            <div className="mt-3">
+              <ul className="flex flex-col divide-y divide-[#eef1ef] rounded-lg border border-[#eef1ef]">
+                {items.map((x, i) => (
+                  <li key={i} className={`flex items-start gap-3 px-3 py-2 text-sm ${x.ok ? "" : "bg-amber-50"}`}>
+                    <input type="checkbox" className="!mt-1 !w-auto" checked={x.keep} aria-label={`Keep ${x.prompt}`} onChange={(e) => setItems(items.map((y, j) => (j === i ? { ...y, keep: e.target.checked } : y)))} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block font-semibold">{x.prompt}</span>
+                      <span className="block text-[#5b6865]">{x.options.join(" / ")} · {x.points} pts · {x.answer_window_s}s</span>
+                      {!x.ok && <span className="block text-amber-900">Review: {x.problem || "flagged"}</span>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-3 flex flex-wrap items-end gap-3">
+                <label className="!w-72">Save as pack<input value={f.pack} onChange={(e) => setF({ ...f, pack: e.target.value })} placeholder={`${f.title || "Match"} (AI)`} maxLength={40} /></label>
+                <button className="btn btn-go" onClick={save} disabled={!items.some((x) => x.keep)}>Save {items.filter((x) => x.keep).length} to pack</button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------- trivia (rooms)
+type BankStat = { category_id: string; name: string; verified: number; pending: number; rejected: number; pulled: number; reported: number; plays: number; expiring: number };
+type TCat = { id: string; slug: string; name: string; emoji: string | null; kind: string; description: string | null; sponsor_id: string | null; is_active: boolean; sort_order: number };
+type TQ = { id: string; prompt: string; options: string[]; correct_option: number; explanation: string | null; source_url: string | null; source_title: string | null; status: string; origin: string; reports: number; topic: string | null; checks: { rules?: string[]; check?: string } | null; created_at: string; category_id: string | null };
+type Job = { kind: string; requested: number; generated: number; passed: number; input_tokens: number; output_tokens: number; searches: number; error: string | null; created_at: string };
+
+export function TriviaPanel({ isAdmin }: { isAdmin: boolean }) {
+  const ai = useAiEnabled();
+  const [stats, setStats] = useState<BankStat[]>([]);
+  const [cats, setCats] = useState<TCat[]>([]);
+  const [sponsors, setSponsors] = useState<Sponsor[]>([]);
+  const [queue, setQueue] = useState<TQ[]>([]);
+  const [filter, setFilter] = useState<"reported" | "rejected" | "pulled" | "recent">("reported");
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [gen, setGen] = useState({ categoryId: "", topic: "", count: 10 });
+  const [busy, setBusy] = useState(false);
+  const [newCat, setNewCat] = useState({ name: "", emoji: "", kind: "general", description: "" });
+  const s = useStatus();
+
+  const load = useCallback(async () => {
+    const sb = supabase();
+    const [{ data: st }, { data: c }, { data: sp }, { data: j }] = await Promise.all([
+      sb.rpc("trivia_bank_stats"),
+      sb.from("trivia_categories").select("*").order("sort_order"),
+      sb.from("sponsors").select("*").eq("is_active", true).order("name"),
+      sb.from("ai_jobs").select("*").gte("created_at", new Date(Date.now() - 7 * 86400000).toISOString()).order("created_at", { ascending: false }).limit(200),
+    ]);
+    setStats((st as BankStat[]) ?? []);
+    setCats((c as TCat[]) ?? []);
+    setSponsors((sp as Sponsor[]) ?? []);
+    setJobs((j as Job[]) ?? []);
+  }, []);
+  const loadQueue = useCallback(async () => {
+    let q = supabase().from("trivia_questions").select("*").order("created_at", { ascending: false }).limit(60);
+    if (filter === "reported") q = q.gt("reports", 0).eq("status", "verified");
+    else if (filter === "recent") q = q.eq("status", "verified");
+    else q = q.eq("status", filter);
+    const { data } = await q;
+    setQueue((data as TQ[]) ?? []);
+  }, [filter]);
+  useEffect(() => {
+    load();
+  }, [load]);
+  useEffect(() => {
+    loadQueue();
+  }, [loadQueue]);
+
+  async function generate(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    const { ok, body } = await staffPost("/api/trivia/generate", { categoryId: gen.categoryId || undefined, topic: gen.categoryId ? undefined : gen.topic, count: gen.count });
+    setBusy(false);
+    if (!ok) return s.fail(String(body.error ?? "Couldn't generate."));
+    s.ok(`${body.passed} of ${body.generated} questions passed every check and are live. The rest are under Rejected.`);
+    load();
+    loadQueue();
+  }
+
+  async function setQ(q: TQ, patch: Partial<TQ>, msg: string) {
+    const { error } = await supabase().from("trivia_questions").update(patch).eq("id", q.id);
+    if (error) return s.fail(error);
+    s.ok(msg);
+    loadQueue();
+    load();
+  }
+
+  async function saveCat(c: TCat, patch: Partial<TCat>) {
+    const { error } = await supabase().from("trivia_categories").update(patch).eq("id", c.id);
+    if (error) return s.fail(error);
+    load();
+  }
+
+  async function addCat(e: React.FormEvent) {
+    e.preventDefault();
+    const slug = newCat.name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+    const { error } = await supabase().from("trivia_categories").insert({ ...newCat, slug, emoji: newCat.emoji || null, description: newCat.description || null, sort_order: cats.length + 1 });
+    if (error) return s.fail(error.message.includes("slug") ? "That category already exists." : error);
+    setNewCat({ name: "", emoji: "", kind: "general", description: "" });
+    s.ok("Category added. Generate some questions for it below.");
+    load();
+  }
+
+  const stat = (id: string) => stats.find((x) => x.category_id === id);
+  const totals = jobs.reduce(
+    (a, j) => ({ gen: a.gen + j.generated, pass: a.pass + j.passed, inTok: a.inTok + j.input_tokens, outTok: a.outTok + j.output_tokens, searches: a.searches + j.searches, errors: a.errors + (j.error ? 1 : 0) }),
+    { gen: 0, pass: 0, inTok: 0, outTok: 0, searches: 0, errors: 0 },
+  );
+
+  return (
+    <div className="flex flex-col gap-6">
+      {s.node}
+      <Card title="Question bank" aside={<span className="text-sm text-[#5b6865]">{ai === false ? "AI is off: rooms use the checked bank only" : ai ? "AI on: the bank refills every night at 2 am" : ""}</span>}>
+        <table className="w-full text-sm">
+          <thead className="text-left text-[#5b6865]">
+            <tr><th className="py-1">Category</th><th>Live questions</th><th>Reported</th><th>Rejected</th><th>Plays</th><th>Sponsor</th><th></th></tr>
+          </thead>
+          <tbody>
+            {cats.map((c) => {
+              const x = stat(c.id);
+              return (
+                <tr key={c.id} className={`tabular border-t border-[#eef1ef] ${c.is_active ? "" : "opacity-50"}`}>
+                  <td className="py-2 font-semibold">{c.emoji} {c.name} <span className="font-normal text-[#5b6865]">{c.kind}</span></td>
+                  <td className={(x?.verified ?? 0) < 20 ? "font-semibold text-amber-800" : ""}>{x?.verified ?? 0}{(x?.expiring ?? 0) > 0 ? ` (${x?.expiring} expiring)` : ""}</td>
+                  <td>{x?.reported ?? 0}</td>
+                  <td>{x?.rejected ?? 0}</td>
+                  <td>{x?.plays ?? 0}</td>
+                  <td>
+                    <select className="!w-40 !py-1" value={c.sponsor_id ?? ""} onChange={(e) => saveCat(c, { sponsor_id: e.target.value || null })} aria-label={`Sponsor for ${c.name}`}>
+                      <option value="">No sponsor</option>
+                      {sponsors.map((sp) => <option key={sp.id} value={sp.id}>{sp.name}</option>)}
+                    </select>
+                  </td>
+                  <td className="text-right"><button className="btn btn-line !py-1" onClick={() => saveCat(c, { is_active: !c.is_active })}>{c.is_active ? "Hide" : "Show"}</button></td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <p className="mt-2 text-xs text-[#5b6865]">A sponsored category shows &quot;This round is brought to you by…&quot; on every question in it. Fewer than 20 live questions is marked: generate more.</p>
+        <form onSubmit={addCat} className="mt-4 grid gap-2 md:grid-cols-[1fr_80px_140px_1.5fr_auto] md:items-end">
+          <label>New category<input required value={newCat.name} onChange={(e) => setNewCat({ ...newCat, name: e.target.value })} placeholder="Kabaddi" /></label>
+          <label>Emoji<input value={newCat.emoji} onChange={(e) => setNewCat({ ...newCat, emoji: e.target.value })} maxLength={4} /></label>
+          <label>Type
+            <select value={newCat.kind} onChange={(e) => setNewCat({ ...newCat, kind: e.target.value })}>
+              <option value="sports">Sports</option><option value="bollywood">Bollywood</option><option value="current">Current affairs (needs sources)</option><option value="general">General</option>
+            </select>
+          </label>
+          <label>Short description<input value={newCat.description} onChange={(e) => setNewCat({ ...newCat, description: e.target.value })} /></label>
+          <button className="btn btn-dark">Add</button>
+        </form>
+      </Card>
+
+      <Card title="Write and fact-check questions now">
+        {ai === false ? (
+          <p className="text-sm text-[#5b6865]">AI is off. Add ANTHROPIC_API_KEY in Vercel and redeploy to switch it on.</p>
+        ) : (
+          <form onSubmit={generate} className="grid gap-3 md:grid-cols-[1fr_1fr_100px_auto] md:items-end">
+            <label>Category
+              <select value={gen.categoryId} onChange={(e) => setGen({ ...gen, categoryId: e.target.value })}>
+                <option value="">None: use the topic</option>
+                {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </label>
+            <label>Or a topic<input disabled={Boolean(gen.categoryId)} value={gen.topic} onChange={(e) => setGen({ ...gen, topic: e.target.value })} placeholder="IPL 2026 season" /></label>
+            <label>How many<select value={gen.count} onChange={(e) => setGen({ ...gen, count: Number(e.target.value) })}>{[5, 10, 15, 20].map((n) => <option key={n}>{n}</option>)}</select></label>
+            <button className="btn btn-dark" disabled={busy}>{busy ? "Writing and checking…" : "Generate"}</button>
+          </form>
+        )}
+        <p className="mt-2 text-xs text-[#5b6865]">Every question passes rule checks and a blind second check by a different AI model. Current affairs questions also need a news source from that day&apos;s search, and retire after 10 days.</p>
+      </Card>
+
+      <Card
+        title="Review queue"
+        aside={
+          <select className="!w-48" value={filter} onChange={(e) => setFilter(e.target.value as typeof filter)}>
+            <option value="reported">Reported by players</option>
+            <option value="rejected">Rejected by the checks</option>
+            <option value="pulled">Pulled (2+ reports)</option>
+            <option value="recent">Recently added (live)</option>
+          </select>
+        }
+      >
+        <ul className="flex flex-col gap-3">
+          {queue.map((q) => (
+            <li key={q.id} className="rounded-lg border border-[#eef1ef] p-3 text-sm">
+              <p className="font-semibold">{q.prompt}</p>
+              <ol className="mt-1 grid gap-1 sm:grid-cols-2">
+                {q.options.map((o, i) => (
+                  <li key={i}>
+                    <button
+                      className={`w-full rounded px-2 py-1 text-left ${i === q.correct_option ? "bg-emerald-100 font-semibold text-emerald-900" : "bg-[#f6f8f7]"}`}
+                      title="Make this the correct answer"
+                      onClick={() => i !== q.correct_option && confirm(`Change the answer to “${o}”?`) && setQ(q, { correct_option: i }, "Answer changed.")}
+                    >
+                      {i === q.correct_option ? "✓ " : ""}{o}
+                    </button>
+                  </li>
+                ))}
+              </ol>
+              {q.explanation && <p className="mt-1 text-[#3b4745]">{q.explanation}</p>}
+              <p className="mt-1 text-xs text-[#5b6865]">
+                {q.origin === "ai" ? "AI" : q.origin}{q.topic ? ` · topic “${q.topic}”` : ""} · {q.reports} reports
+                {q.checks?.check ? ` · check: ${q.checks.check}` : ""}{q.checks?.rules?.length ? ` · rules: ${q.checks.rules.join(", ")}` : ""}
+                {q.source_url && <> · <a className="underline" href={q.source_url} target="_blank" rel="noopener">{q.source_title || "source"}</a></>}
+              </p>
+              <div className="mt-2 flex gap-2">
+                {q.status !== "verified" && <button className="btn btn-go !py-1" onClick={() => setQ(q, { status: "verified", reports: 0 }, "Approved and live.")}>Approve</button>}
+                {q.status === "verified" && q.reports > 0 && <button className="btn btn-line !py-1" onClick={() => setQ(q, { reports: 0 }, "Reports cleared.")}>It&apos;s correct, clear reports</button>}
+                {q.status !== "pulled" && q.status !== "rejected" && <button className="btn btn-line !py-1" onClick={() => setQ(q, { status: "pulled" }, "Pulled from play.")}>Pull</button>}
+              </div>
+            </li>
+          ))}
+          {queue.length === 0 && <li className="py-6 text-center text-[#5b6865]">Nothing here.</li>}
+        </ul>
+      </Card>
+
+      {isAdmin && (
+        <Card title="AI usage, last 7 days">
+          <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
+            <p><span className="block text-[#5b6865]">Questions written</span><span className="text-xl font-bold">{totals.gen}</span></p>
+            <p><span className="block text-[#5b6865]">Passed checks</span><span className="text-xl font-bold">{totals.pass}{totals.gen ? ` (${Math.round((totals.pass / totals.gen) * 100)}%)` : ""}</span></p>
+            <p><span className="block text-[#5b6865]">Tokens in / out</span><span className="text-xl font-bold">{(totals.inTok / 1000).toFixed(0)}k / {(totals.outTok / 1000).toFixed(0)}k</span></p>
+            <p><span className="block text-[#5b6865]">Web searches</span><span className="text-xl font-bold">{totals.searches}</span></p>
+            <p><span className="block text-[#5b6865]">Failed runs</span><span className="text-xl font-bold">{totals.errors}</span></p>
+          </div>
+          <p className="mt-2 text-xs text-[#5b6865]">Exact charges are on your Anthropic console (console.anthropic.com, Usage). Players are limited to 6 custom-topic rooms a day.</p>
+        </Card>
+      )}
+    </div>
   );
 }

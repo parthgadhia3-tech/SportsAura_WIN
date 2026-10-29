@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { friendlyError } from "@/lib/copy";
 import { fillTemplate, type Bucket, type Match, type Question, type QuestionTemplate, type Sponsor, type Venue } from "@/lib/types";
@@ -66,11 +66,14 @@ export function LiveConsole() {
   const [quickSponsor, setQuickSponsor] = useState("");
   const [autoNext, setAutoNext] = useState(false);
   const [oneTap, setOneTap] = useState(false);
+  const [autopilot, setAutopilot] = useState(false);
+  const [autoMins, setAutoMins] = useState(4);
   const [armed, setArmed] = useState<{ qid: string; i: number } | null>(null);
 
   useEffect(() => {
     setAutoNext(lsGet("auto", "0") === "1");
     setOneTap(lsGet("onetap", "0") === "1");
+    setAutoMins(Number(lsGet("automins", "4")) || 4);
   }, []);
 
   const match = matches.find((m) => m.id === matchId);
@@ -276,6 +279,23 @@ export function LiveConsole() {
   const sponsorName = useMemo(() => Object.fromEntries(sponsors.map((s) => [s.id, s.name])), [sponsors]);
   const next = packItems.length ? packItems[nextIdx % packItems.length] : null;
   const isLive = match?.status === "live";
+
+  // Autopilot: when nothing is on phones and the interval has passed since the
+  // last push, push the next pack question. The host only settles.
+  const lastPushAt = useMemo(
+    () => questions.reduce((m, q) => Math.max(m, q.pushed_at ? new Date(q.pushed_at).getTime() : 0), 0),
+    [questions],
+  );
+  const lastAuto = useRef(0);
+  const autoDueIn = autopilot && lastPushAt ? Math.max(0, lastPushAt + autoMins * 60000 - now) : 0;
+  useEffect(() => {
+    if (!autopilot || !isLive || busy || !next || live.length > 0) return;
+    if (lastPushAt && now - lastPushAt < autoMins * 60000) return;
+    if (now - lastAuto.current < 20000) return; // never twice in a row
+    lastAuto.current = now;
+    pushTemplate(next, nextIdx % packItems.length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autopilot, isLive, busy, next, live.length, lastPushAt, now, autoMins]);
 
   return (
     <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
@@ -495,6 +515,44 @@ export function LiveConsole() {
                   {fillTemplate(t.prompt, match.title, over).replace(/^Over \d+: /, "")}
                 </button>
               ))}
+            </div>
+
+            <div className={`mt-4 flex flex-wrap items-center gap-3 rounded-lg p-3 ${autopilot ? "bg-[#0f7a5c] text-white" : "bg-[#f1f5f3]"}`}>
+              <label className="!flex !w-auto items-center gap-2 !font-semibold">
+                <input
+                  type="checkbox"
+                  className="!w-auto"
+                  checked={autopilot}
+                  onChange={(e) => {
+                    setAutopilot(e.target.checked);
+                    if (e.target.checked && !autoNext) {
+                      setAutoNext(true);
+                      lsSet("auto", "1");
+                    }
+                  }}
+                />
+                Autopilot
+              </label>
+              <span className="text-sm">push the next question every</span>
+              <select
+                className="!w-24 !py-1 text-black"
+                value={autoMins}
+                onChange={(e) => {
+                  setAutoMins(Number(e.target.value));
+                  lsSet("automins", e.target.value);
+                }}
+              >
+                {[2, 3, 4, 5, 8, 10].map((m) => (
+                  <option key={m} value={m}>{m} min</option>
+                ))}
+              </select>
+              <span className="text-sm">
+                {autopilot
+                  ? live.length > 0
+                    ? "Waiting for you to settle the live question."
+                    : `Next push in ${Math.floor(autoDueIn / 60000)}:${String(Math.floor((autoDueIn % 60000) / 1000)).padStart(2, "0")}. Keep this tab open.`
+                  : "You only tap the right answer."}
+              </span>
             </div>
 
             <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">

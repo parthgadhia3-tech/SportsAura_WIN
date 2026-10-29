@@ -315,6 +315,10 @@ export function PatronApp({ slug }: { slug: string }) {
         <p className="mt-3 text-[17px] text-ink/70">
           Predictions open when the next match starts at {venue.name}. Your wallet and rewards are always here.
         </p>
+        <a href={`/play/new?venue=${venue.slug}`} className="mt-8 block rounded-2xl bg-brand px-5 py-4 font-display text-2xl font-bold text-on-brand">
+          Play trivia with your table
+          <span className="block font-sans text-sm font-normal opacity-80">Make a room, share the code, and go</span>
+        </a>
       </div>
     );
   } else if (presence === "unknown") {
