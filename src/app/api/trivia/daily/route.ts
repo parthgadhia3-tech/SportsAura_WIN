@@ -8,8 +8,10 @@ export const maxDuration = 300;
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret || request.headers.get("authorization") !== `Bearer ${secret}`) return new Response("unauthorized", { status: 401 });
-  if (!aiEnabled()) return Response.json({ skipped: "AI not configured" });
   const db = supabaseAdmin();
+  // A daily read also keeps a free-plan database from pausing when no games are played.
+  const { count } = await db.from("trivia_categories").select("id", { count: "exact", head: true });
+  if (!aiEnabled()) return Response.json({ skipped: "AI not configured", categories: count });
   const perCat = Number(process.env.TRIVIA_DAILY_PER_CATEGORY) || 6;
   const { data: cats } = await db.from("trivia_categories").select("id, slug, kind").eq("is_active", true);
   const results = await Promise.all(
