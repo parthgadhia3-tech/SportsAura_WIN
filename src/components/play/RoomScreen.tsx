@@ -643,7 +643,7 @@ function Reactions({ s }: { s: RoomState }) {
       </div>
       <nav className="fixed inset-x-0 bottom-0 z-30 mx-auto flex max-w-md justify-between gap-1 border-t border-ink/10 bg-black/55 px-3 pb-[max(.6rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl" aria-label="Reactions">
         {EMOJIS.map((e) => (
-          <button key={e} aria-label={`React ${e}`} className="rounded-xl px-1.5 py-1 text-2xl active:scale-90" onClick={() => supabase().rpc("room_react", { p_code: s.code, p_emoji: e })}>
+          <button key={e} aria-label={`React ${e}`} className="rounded-xl px-1.5 py-1 text-2xl active:scale-90" onClick={() => { void supabase().rpc("room_react", { p_code: s.code, p_emoji: e }).then(() => undefined); }}>
             {e}
           </button>
         ))}
