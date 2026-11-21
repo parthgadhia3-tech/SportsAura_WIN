@@ -37,9 +37,12 @@ function lsSet(k: string, v: string) {
   }
 }
 
-export function LiveConsole() {
+export function LiveConsole({ fixedMatchId }: { fixedMatchId?: string } = {}) {
   const [matches, setMatches] = useState<Match[]>([]);
-  const [matchId, setMatchId] = useState<string>("");
+  const [matchId, setMatchId] = useState<string>(fixedMatchId ?? "");
+  useEffect(() => {
+    if (fixedMatchId) setMatchId(fixedMatchId);
+  }, [fixedMatchId]);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [buckets, setBuckets] = useState<Bucket[]>([]);
   const [venues, setVenues] = useState<Venue[]>([]);
@@ -301,7 +304,7 @@ export function LiveConsole() {
     <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
       <section className="flex flex-col gap-4">
         <div className="rounded-xl border border-[#d8dedb] bg-white p-4">
-          <label>
+          <label className={fixedMatchId ? "hidden" : undefined}>
             Match
             <select value={matchId} onChange={(e) => setMatchId(e.target.value)}>
               {matches.map((m) => (
@@ -311,6 +314,11 @@ export function LiveConsole() {
               ))}
             </select>
           </label>
+          {fixedMatchId && match && (
+            <p className="font-bold">
+              {match.title} <span className="font-normal text-[#5b6865]">({match.status})</span>
+            </p>
+          )}
           {match && (
             <>
               <label className="mt-3">
