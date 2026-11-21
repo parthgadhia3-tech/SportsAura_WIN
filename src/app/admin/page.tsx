@@ -5,9 +5,9 @@ import { supabase } from "@/lib/supabase";
 import { APP_NAME } from "@/lib/copy";
 import { StaffGate, type StaffMember } from "@/components/staff/StaffGate";
 import { LiveConsole } from "@/components/staff/LiveConsole";
+import { SetupFlow } from "@/components/staff/SetupFlow";
 import {
   AnalyticsPanel,
-  MatchesPanel,
   OffersPanel,
   PacksPanel,
   TriviaPanel,
@@ -21,8 +21,8 @@ import {
 } from "@/components/staff/AdminPanels";
 
 const TABS = [
-  { key: "live", label: "Live", admin: false },
-  { key: "matches", label: "Matches", admin: false },
+  { key: "setup", label: "1. Set up", admin: false },
+  { key: "live", label: "2. Live", admin: false },
   { key: "packs", label: "Packs", admin: false },
   { key: "rewards", label: "Rewards", admin: false },
   { key: "sponsors", label: "Sponsors", admin: false },
@@ -46,7 +46,7 @@ export default function AdminPage() {
 }
 
 function Console({ staff }: { staff: StaffMember }) {
-  const [tab, setTab] = useState<Tab>("live");
+  const [tab, setTab] = useState<Tab>("setup");
   const tabs = TABS.filter((t) => !t.admin || staff.role === "admin");
 
   return (
@@ -59,10 +59,11 @@ function Console({ staff }: { staff: StaffMember }) {
           <nav className="flex flex-wrap gap-1" aria-label="Sections">
             {tabs.map((t) => (
               <button
+                data-sep={t.key === "packs" ? "" : undefined}
                 key={t.key}
                 onClick={() => setTab(t.key)}
                 aria-current={tab === t.key ? "page" : undefined}
-                className={`rounded-md px-3 py-1.5 text-sm font-semibold ${tab === t.key ? "bg-[#17201f] text-white" : "text-[#3b4745] hover:bg-[#eef1ef]"}`}
+                className={`rounded-md px-3 py-1.5 text-sm font-semibold data-[sep]:ml-3 ${tab === t.key ? "bg-[#17201f] text-white" : "text-[#3b4745] hover:bg-[#eef1ef]"}`}
               >
                 {t.label}
               </button>
@@ -75,7 +76,7 @@ function Console({ staff }: { staff: StaffMember }) {
       </header>
       <main className="mx-auto max-w-7xl px-4 py-6">
         {tab === "live" && <LiveConsole />}
-        {tab === "matches" && <MatchesPanel />}
+        {tab === "setup" && <SetupFlow onOpenLive={() => setTab("live")} />}
         {tab === "packs" && <PacksPanel />}
         {tab === "rewards" && <RewardsPanel />}
         {tab === "sponsors" && <SponsorsPanel isAdmin={staff.role === "admin"} />}

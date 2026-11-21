@@ -15,6 +15,8 @@ export interface Theme {
   surface_color: string;
   logo_url: string | null;
   sponsor_name: string | null;
+  banner_url?: string | null;
+  partner_logos?: string[];
 }
 
 export interface Venue {
@@ -41,6 +43,22 @@ export interface Match {
   reward_set_id?: string | null;
   sponsor_id?: string | null;
   current_over?: number | null;
+  series_id?: string | null;
+  reward_mode?: "set" | "per_question" | null;
+  published_at?: string | null;
+}
+
+export interface Series {
+  id: string;
+  name: string;
+  sport: string;
+  starts_on: string;
+  ends_on: string;
+  theme_id: string | null;
+  sponsor_id: string | null;
+  no_sponsor: boolean;
+  reward_set_id: string | null;
+  is_archived: boolean;
 }
 
 export type RewardRule = "random" | "first_correct" | "every_n_correct";

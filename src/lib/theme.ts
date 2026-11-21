@@ -12,6 +12,8 @@ export const DEFAULT_THEME: Theme = {
   surface_color: "#123236",
   logo_url: null,
   sponsor_name: null,
+  banner_url: null,
+  partner_logos: [],
 };
 
 const HEX = /^#[0-9a-f]{6}$/i;

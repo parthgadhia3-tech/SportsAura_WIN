@@ -369,7 +369,7 @@ export function PatronApp({ slug }: { slug: string }) {
         <header className="sticky top-0 z-20 flex items-center gap-3 px-5 pb-3 pt-[max(1rem,env(safe-area-inset-top))] backdrop-blur-md">
           {theme?.logo_url && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={theme.logo_url} alt={theme.sponsor_name ?? ""} className="h-9 w-auto max-w-24 object-contain" />
+            <img src={theme.logo_url} alt={theme.sponsor_name ?? ""} decoding="async" className="h-9 w-auto max-w-24 object-contain" />
           )}
           <div className="min-w-0 flex-1">
             <p className="truncate font-display text-xl font-bold leading-tight">{match?.title ?? venue.name}</p>
@@ -388,7 +388,20 @@ export function PatronApp({ slug }: { slug: string }) {
         <SectionTabs tab={tab} onTab={setTab} />
 
         <main className="flex-1 pb-32">
+          {tab === "play" && match && theme?.banner_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={theme.banner_url} alt={theme.sponsor_name ?? ""} width={1200} height={400} decoding="async" className="mx-5 mb-3 mt-1 block aspect-[3/1] w-[calc(100%-2.5rem)] rounded-2xl object-cover" />
+          )}
           {tab === "play" && playContent}
+          {tab === "play" && !!theme?.partner_logos?.length && (
+            <div className="mx-5 mt-6 flex flex-wrap items-center gap-3 rounded-2xl bg-black/25 px-4 py-3">
+              <span className="text-xs uppercase tracking-wide text-ink/65">In partnership with</span>
+              {theme.partner_logos.map((u) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={u} src={u} alt="" loading="lazy" decoding="async" className="h-7 w-auto max-w-20 object-contain" />
+              ))}
+            </div>
+          )}
           {tab === "ranks" && <LeaderboardTab venue={venue} match={match} />}
           {tab === "offers" && <OffersTab venueId={venue.id} />}
         </main>

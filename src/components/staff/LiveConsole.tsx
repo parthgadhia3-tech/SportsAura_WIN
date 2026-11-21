@@ -103,7 +103,7 @@ export function LiveConsole() {
   const loadMeta = useCallback(async () => {
     const sb = supabase();
     const [{ data: ms }, { data: bs }, { data: vs }, { data: sp }, { data: tp }] = await Promise.all([
-      sb.from("matches").select("*").neq("status", "ended").order("starts_at"),
+      sb.from("matches").select("*").neq("status", "ended").not("published_at", "is", null).order("starts_at"),
       sb.from("coupon_buckets").select("*").eq("is_active", true).order("created_at", { ascending: false }),
       sb.from("venues").select("id, name, slug").eq("is_active", true).order("name"),
       sb.from("sponsors").select("*").eq("is_active", true).order("name"),
@@ -333,7 +333,7 @@ export function LiveConsole() {
               </div>
             </>
           )}
-          {!matches.length && <p className="mt-2 text-sm text-[#5b6865]">Create a match in the Matches tab first.</p>}
+          {!matches.length && <p className="mt-2 text-sm text-[#5b6865]">No published matches yet. Set one up and publish it in 1. Set up.</p>}
         </div>
 
         <form

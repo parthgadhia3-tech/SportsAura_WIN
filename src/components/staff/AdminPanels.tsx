@@ -5,6 +5,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { supabase } from "@/lib/supabase";
 import { friendlyError } from "@/lib/copy";
 import { DEFAULT_THEME, themeVars } from "@/lib/theme";
+import { ImageUpload } from "./ImageUpload";
 import type { Banner, BillingStatus, Bucket, BgType, CodeMode, Match, QuestionTemplate, RewardRule, RewardSet, Season, Sponsor, Theme, Venue, VenueAccount, VenuePlan } from "@/lib/types";
 
 // ---------------------------------------------------------------- helpers
@@ -314,7 +315,7 @@ export function RewardsPanel() {
       {s.node}
       <Card title="Reward sets">
         <p className="mb-3 text-sm text-[#5b6865]">
-          A set is a numbered list of coupons (Z1, Z2, ...). Attach it to a match in the Matches tab and every right answer
+          A set is a numbered list of coupons (Z1, Z2, ...). Attach it to a match in Set up, step 3, and every right answer
           wins one coupon automatically: event coupons when their rule fires, otherwise a random one.
         </p>
         <div className="flex flex-wrap items-start gap-4">
@@ -372,7 +373,7 @@ export function RewardsPanel() {
               </div>
             )}
             <label>Brand name<input required value={form.brand_name} onChange={(e) => set("brand_name", e.target.value)} /></label>
-            <label>Logo URL (https)<input type="url" pattern="https://.*" value={form.logo_url} onChange={(e) => set("logo_url", e.target.value)} /></label>
+            <ImageUpload kind="logo" label="Brand logo" value={form.logo_url || null} onChange={(u) => set("logo_url", u ?? "")} />
             <label>Reward title<input required value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="20% off your food bill" /></label>
             <label>Description<input value={form.description} onChange={(e) => set("description", e.target.value)} /></label>
             <label>Terms<textarea rows={2} value={form.terms} onChange={(e) => set("terms", e.target.value)} /></label>
@@ -457,10 +458,7 @@ export function RewardsPanel() {
 // ---------------------------------------------------------------- themes
 export function ThemesPanel() {
   const [themes, setThemes] = useState<Theme[]>([]);
-  const [t, setT] = useState<Theme>({ ...DEFAULT_THEME, id: "", name: "" });
-  const s = useStatus();
-  const set = <K extends keyof Theme>(k: K, v: Theme[K]) => setT((x) => ({ ...x, [k]: v }));
-
+  const [editing, setEditing] = useState<Theme | null>(null);
   const load = useCallback(async () => {
     const { data } = await supabase().from("themes").select("*").order("name");
     setThemes((data as Theme[]) ?? []);
@@ -468,18 +466,59 @@ export function ThemesPanel() {
   useEffect(() => {
     load();
   }, [load]);
+  return (
+    <div className="flex flex-col gap-6">
+      <ThemeEditor key={editing?.id ?? "new"} initial={editing} onSaved={() => { setEditing(null); load(); }} />
+      <Card title="All themes">
+        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {themes.map((x) => (
+            <li key={x.id} className="flex items-center gap-3 rounded-lg border border-[#eef1ef] p-2">
+              <span className="size-10 shrink-0 rounded-md" style={{ background: themeVars(x)["--brand-bg" as keyof React.CSSProperties] as string }} />
+              <span className="size-5 shrink-0 rounded-full" style={{ background: x.primary_color }} />
+              <span className="flex-1 font-semibold">{x.name}</span>
+              <button className="btn btn-line !py-1" onClick={() => setEditing(x)}>Edit</button>
+            </li>
+          ))}
+        </ul>
+      </Card>
+    </div>
+  );
+}
+
+const NEW_THEME = (): Theme => ({ ...DEFAULT_THEME, id: "", name: "", partner_logos: [] });
+
+/** Theme form with uploads for the title sponsor logo, partner logos, banner and background. */
+export function ThemeEditor({ initial, onSaved, compact }: { initial: Theme | null; onSaved: (t: Theme) => void; compact?: boolean }) {
+  const [t, setT] = useState<Theme>(() => (initial ? { ...initial, partner_logos: initial.partner_logos ?? [] } : NEW_THEME()));
+  const s = useStatus();
+  const set = <K extends keyof Theme>(k: K, v: Theme[K]) => setT((x) => ({ ...x, [k]: v }));
+  const partners = t.partner_logos ?? [];
+  const setPartner = (i: number, url: string | null) => {
+    const next = [...partners];
+    if (url) next[i] = url;
+    else next.splice(i, 1);
+    set("partner_logos", next.filter(Boolean).slice(0, 4));
+  };
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
+    if (t.sponsor_name?.trim() && !t.logo_url) return s.fail("Add the title sponsor's logo, or clear the sponsor name.");
+    if (t.bg_type === "image" && !/^https:\/\//.test(t.bg_value)) return s.fail("Upload a background image, or switch the background to a colour.");
     const { id, ...row } = t;
-    const payload = { ...row, logo_url: row.logo_url || null, sponsor_name: row.sponsor_name || null };
-    const { error } = id
-      ? await supabase().from("themes").update(payload).eq("id", id)
-      : await supabase().from("themes").insert(payload);
-    if (error) return s.fail(error.message.includes("bg_value") ? "Background value doesn't match the type. Use #RRGGBB, a linear-/radial-gradient(...) or an https image URL." : error);
+    const payload = {
+      ...row,
+      name: row.name.trim(),
+      logo_url: row.logo_url || null,
+      sponsor_name: row.sponsor_name?.trim() || null,
+      banner_url: row.banner_url || null,
+      partner_logos: (row.partner_logos ?? []).filter(Boolean),
+    };
+    const { data, error } = id
+      ? await supabase().from("themes").update(payload).eq("id", id).select().single()
+      : await supabase().from("themes").insert(payload).select().single();
+    if (error) return s.fail(error.message.includes("bg_value") ? "Background value doesn't match the type. Use #RRGGBB, a linear-/radial-gradient(...) or an uploaded image." : error);
     s.ok("Theme saved.");
-    setT({ ...DEFAULT_THEME, id: "", name: "" });
-    load();
+    onSaved(data as Theme);
   }
 
   const color = (k: "primary_color" | "secondary_color" | "text_color" | "surface_color", label: string) => (
@@ -493,74 +532,101 @@ export function ThemesPanel() {
   );
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[400px_320px_1fr]">
-      <Card title={t.id ? "Edit theme" : "New theme"}>
-        <form onSubmit={save} className="flex flex-col gap-3">
-          <label>Name<input required value={t.name} onChange={(e) => set("name", e.target.value)} /></label>
-          <label>Sponsor name<input value={t.sponsor_name ?? ""} onChange={(e) => set("sponsor_name", e.target.value)} /></label>
-          <label>Sponsor logo URL (https)<input value={t.logo_url ?? ""} onChange={(e) => set("logo_url", e.target.value)} /></label>
-          <label>
-            Background type
-            <select value={t.bg_type} onChange={(e) => set("bg_type", e.target.value as BgType)}>
-              <option value="solid">Solid colour</option>
-              <option value="gradient">Gradient</option>
-              <option value="image">Image</option>
-            </select>
-          </label>
-          <label>
-            Background value
-            <input
-              value={t.bg_value}
-              onChange={(e) => set("bg_value", e.target.value)}
-              placeholder={t.bg_type === "solid" ? "#0C2427" : t.bg_type === "gradient" ? "linear-gradient(160deg, #7F1D1D 0%, #111111 70%)" : "https://..."}
-            />
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            {color("primary_color", "Primary")}
-            {color("secondary_color", "Secondary")}
-            {color("text_color", "Text")}
-            {color("surface_color", "Cards")}
+    <div className={`grid gap-6 ${compact ? "xl:grid-cols-[1fr_320px]" : "lg:grid-cols-[1fr_320px]"}`}>
+      <Card title={t.id ? `Edit theme: ${initial?.name ?? ""}` : "New theme"}>
+        <form onSubmit={save} className="flex flex-col gap-4">
+          <label>Theme name<input required value={t.name} onChange={(e) => set("name", e.target.value)} placeholder="e.g. Winter T20 series look" /></label>
+
+          <fieldset className="flex flex-col gap-3 rounded-lg border border-[#d8dedb] p-3">
+            <legend className="px-1 text-sm font-bold">Sponsor branding</legend>
+            <label>Title sponsor name (leave empty if none)<input value={t.sponsor_name ?? ""} onChange={(e) => set("sponsor_name", e.target.value)} /></label>
+            <ImageUpload kind="logo" label="Title sponsor logo (top-left of the player screen)" value={t.logo_url} onChange={(u) => set("logo_url", u)} required={!!t.sponsor_name?.trim()} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              {[0, 1, 2, 3].slice(0, Math.min(4, partners.length + 1)).map((i) => (
+                <ImageUpload key={i} kind="logo" label={`Partner logo ${i + 1}`} value={partners[i] ?? null} onChange={(u) => setPartner(i, u)} />
+              ))}
+            </div>
+            <p className="text-xs text-[#5b6865]">Partner logos show in a small &quot;In partnership with&quot; strip. Up to 4.</p>
+            <ImageUpload kind="banner" label="Banner (shown above the questions)" value={t.banner_url ?? null} onChange={(u) => set("banner_url", u)} />
+          </fieldset>
+
+          <fieldset className="flex flex-col gap-3 rounded-lg border border-[#d8dedb] p-3">
+            <legend className="px-1 text-sm font-bold">Colours and background</legend>
+            <label>
+              Background type
+              <select value={t.bg_type} onChange={(e) => { const v = e.target.value as BgType; setT((x) => ({ ...x, bg_type: v, bg_value: v === "solid" ? "#0C2427" : v === "gradient" ? "linear-gradient(160deg, #7F1D1D 0%, #111111 70%)" : "" })); }}>
+                <option value="solid">Solid colour</option>
+                <option value="gradient">Gradient</option>
+                <option value="image">Image</option>
+              </select>
+            </label>
+            {t.bg_type === "image" ? (
+              <ImageUpload kind="background" label="Background image" value={t.bg_value || null} onChange={(u) => set("bg_value", u ?? "")} required />
+            ) : (
+              <label>
+                {t.bg_type === "solid" ? "Background colour" : "Gradient"}
+                <input value={t.bg_value} onChange={(e) => set("bg_value", e.target.value)} placeholder={t.bg_type === "solid" ? "#0C2427" : "linear-gradient(160deg, #7F1D1D 0%, #111111 70%)"} />
+              </label>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              {color("primary_color", "Primary (buttons)")}
+              {color("secondary_color", "Secondary")}
+              {color("text_color", "Text")}
+              {color("surface_color", "Cards")}
+            </div>
+          </fieldset>
+          <div className="flex gap-2">
+            <button className="btn btn-dark">Save theme</button>
+            {t.id && !compact && <button type="button" className="btn btn-line" onClick={() => setT(NEW_THEME())}>New instead</button>}
           </div>
-          <button className="btn btn-dark">Save theme</button>
           {s.node}
         </form>
       </Card>
+      <ThemePreview t={t} />
+    </div>
+  );
+}
 
-      <div>
-        <p className="mb-2 text-sm font-semibold text-[#3b4745]">Live preview</p>
-        <div className="brand-canvas overflow-hidden rounded-[2rem] border-8 border-[#17201f] p-4" style={{ ...themeVars(t), backgroundAttachment: "scroll" }}>
-          <div className="flex items-center gap-2">
-            {t.logo_url && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={t.logo_url} alt="" className="h-7 w-auto" />
-            )}
-            <p className="font-display text-lg font-bold">MI vs CSK</p>
-            <span className="tabular ml-auto rounded-lg bg-black/30 px-2 py-1 font-display text-lg font-bold text-brand">120</span>
+export function ThemePreview({ t }: { t: Theme }) {
+  const partners = (t.partner_logos ?? []).filter(Boolean);
+  return (
+    <div>
+      <p className="mb-2 text-sm font-semibold text-[#3b4745]">Live preview</p>
+      <div className="brand-canvas overflow-hidden rounded-[2rem] border-8 border-[#17201f] p-4" style={{ ...themeVars(t), backgroundAttachment: "scroll" }}>
+        <div className="flex items-center gap-2">
+          {t.logo_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={t.logo_url} alt="" className="h-8 w-auto max-w-20 object-contain" />
+          )}
+          <div className="min-w-0 flex-1">
+            <p className="font-display text-lg font-bold leading-tight">MI vs CSK</p>
+            <p className="truncate text-xs opacity-70">The Bar{t.sponsor_name ? ` · with ${t.sponsor_name}` : ""}</p>
           </div>
-          <div className="mt-4 rounded-2xl bg-surface/90 p-4">
-            <p className="font-display font-semibold text-brand-2">10 points + Free pint</p>
-            <p className="font-display text-2xl font-bold leading-tight">Will the next over go for 10+ runs?</p>
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              <span className="rounded-xl border-2 border-brand bg-brand px-3 py-2 font-display text-lg font-semibold text-on-brand">Yes</span>
-              <span className="rounded-xl border-2 border-ink/20 bg-black/20 px-3 py-2 font-display text-lg font-semibold">No</span>
-            </div>
-          </div>
-          <div className="mt-4 h-24" />
+          <span className="tabular rounded-lg bg-black/30 px-2 py-1 font-display text-lg font-bold text-brand">120</span>
         </div>
+        {t.banner_url && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={t.banner_url} alt="" className="mt-3 aspect-[3/1] w-full rounded-xl object-cover" />
+        )}
+        <div className="mt-3 rounded-2xl bg-surface/90 p-4">
+          <p className="font-display font-semibold text-brand-2">10 points + Free fries</p>
+          <p className="font-display text-xl font-bold leading-tight">Will the next over go for 10+ runs?</p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <span className="rounded-xl border-2 border-brand bg-brand px-3 py-2 font-display text-lg font-semibold text-on-brand">Yes</span>
+            <span className="rounded-xl border-2 border-ink/20 bg-black/20 px-3 py-2 font-display text-lg font-semibold">No</span>
+          </div>
+        </div>
+        {partners.length > 0 && (
+          <div className="mt-3 flex items-center gap-2 rounded-xl bg-black/25 px-3 py-2">
+            <span className="text-[10px] uppercase tracking-wide opacity-70">In partnership with</span>
+            {partners.map((u) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img key={u} src={u} alt="" className="h-6 w-auto max-w-14 object-contain" />
+            ))}
+          </div>
+        )}
+        <div className="mt-4 h-10" />
       </div>
-
-      <Card title="Themes">
-        <ul className="flex flex-col gap-2">
-          {themes.map((x) => (
-            <li key={x.id} className="flex items-center gap-3 rounded-lg border border-[#eef1ef] p-2">
-              <span className="size-10 shrink-0 rounded-md" style={{ background: themeVars(x)["--brand-bg" as keyof React.CSSProperties] as string }} />
-              <span className="size-5 shrink-0 rounded-full" style={{ background: x.primary_color }} />
-              <span className="flex-1 font-semibold">{x.name}</span>
-              <button className="btn btn-line !py-1" onClick={() => setT(x)}>Edit</button>
-            </li>
-          ))}
-        </ul>
-      </Card>
     </div>
   );
 }
@@ -743,7 +809,7 @@ export function OffersPanel() {
         <form onSubmit={save} className="flex flex-col gap-3">
           <label>Headline<input required value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} /></label>
           <label>Details<input value={f.subtitle} onChange={(e) => setF({ ...f, subtitle: e.target.value })} /></label>
-          <label>Image URL (https, 16:9)<input type="url" pattern="https://.*" value={f.image_url} onChange={(e) => setF({ ...f, image_url: e.target.value })} /></label>
+          <ImageUpload kind="offer" label="Offer image" value={f.image_url || null} onChange={(u) => setF({ ...f, image_url: u ?? "" })} />
           <label>Link (https, optional)<input type="url" pattern="https://.*" value={f.link_url} onChange={(e) => setF({ ...f, link_url: e.target.value })} /></label>
           <label>
             Show at
@@ -1254,7 +1320,7 @@ export function SponsorsPanel({ isAdmin }: { isAdmin: boolean }) {
         <Card title={f.id ? "Edit sponsor" : "New sponsor"} aside={f.id && <button className="btn btn-line" onClick={() => setF(EMPTY_SPONSOR)}>New instead</button>}>
           <form onSubmit={save} className="flex flex-col gap-3">
             <label>Brand name<input required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="e.g. a cab app" /></label>
-            <label>Logo link (https, optional)<input type="url" value={f.logo_url} onChange={(e) => setF({ ...f, logo_url: e.target.value })} /></label>
+            <ImageUpload kind="logo" label="Brand logo" value={f.logo_url || null} onChange={(u) => setF({ ...f, logo_url: u ?? "" })} />
             <label>Tagline (optional)<input maxLength={90} value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} placeholder="Get home safe after the match" /></label>
             <label>Website (https, optional)<input type="url" value={f.link_url} onChange={(e) => setF({ ...f, link_url: e.target.value })} /></label>
             <button className="btn btn-dark">Save sponsor</button>
