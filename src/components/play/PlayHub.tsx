@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { ErrorNote, Spinner } from "@/components/patron/ui";
 import { LegalLinks } from "@/components/LegalLinks";
 import { PlayShell, modeInfo, playError } from "./shared";
+import { AppNav } from "@/components/AppNav";
 
 type Profile = {
   streak: number;
@@ -19,7 +20,12 @@ type Profile = {
 type Cat = { id: string; slug: string; name: string; emoji: string; description: string | null };
 
 export function PlayHub() {
-  return <PlayShell>{({ profile }) => <Hub name={profile.display_name} />}</PlayShell>;
+  return (
+    <>
+      <PlayShell>{({ profile }) => <Hub name={profile.display_name} />}</PlayShell>
+      <AppNav />
+    </>
+  );
 }
 
 function Hub({ name }: { name: string }) {
@@ -60,7 +66,7 @@ function Hub({ name }: { name: string }) {
   const done = me.today?.status === "finished";
 
   return (
-    <main className="mx-auto flex max-w-md flex-col gap-6 px-5 pb-12 pt-8">
+    <main className="mx-auto flex max-w-md flex-col gap-6 px-5 pb-32 pt-8">
       <header className="flex items-center justify-between">
         <Link href="/" className="font-display text-2xl font-bold text-brand">SportsAura</Link>
         <span className="text-sm text-ink/70">Hi {name}</span>

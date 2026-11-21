@@ -11,13 +11,12 @@ import { Onboarding } from "./Onboarding";
 import { VerifyPresence, getPosition } from "./VerifyPresence";
 import { PlayTab } from "./PlayTab";
 import { LeaderboardTab } from "./LeaderboardTab";
-import { WalletTab } from "./WalletTab";
 import { OffersTab } from "./OffersTab";
-import { MoreTab } from "./MoreTab";
+import { AppNav, LAST_VENUE_KEY } from "@/components/AppNav";
 import { Spinner } from "./ui";
 import { HowToPlayTour } from "./HowToPlayTour";
 
-type Tab = "play" | "ranks" | "wallet" | "offers" | "more";
+type Tab = "play" | "ranks" | "offers";
 type Presence = "unknown" | "verify" | "ok";
 
 const HEARTBEAT_MS = 120_000;
@@ -98,8 +97,20 @@ export function PatronApp({ slug }: { slug: string }) {
 
   // First time this account plays on this phone: show the walkthrough.
   useEffect(() => {
-    if (profile && !tourSeen(profile.id)) setShowTour(true);
+    if (!profile) return;
+    const asked = new URLSearchParams(window.location.search).get("tour") === "1";
+    if (asked || !tourSeen(profile.id)) setShowTour(true);
   }, [profile]);
+
+  // Remember this bar, so the Live tab brings the player straight back.
+  useEffect(() => {
+    if (!venue) return;
+    try {
+      localStorage.setItem(LAST_VENUE_KEY, venue.slug);
+    } catch {
+      /* private mode */
+    }
+  }, [venue]);
 
   const closeTour = useCallback(() => {
     if (profile) markTourSeen(profile.id);
@@ -374,16 +385,15 @@ export function PatronApp({ slug }: { slug: string }) {
             </div>
           )}
         </header>
+        <SectionTabs tab={tab} onTab={setTab} />
 
-        <main className="flex-1 pb-28">
+        <main className="flex-1 pb-32">
           {tab === "play" && playContent}
           {tab === "ranks" && <LeaderboardTab venue={venue} match={match} />}
-          {tab === "wallet" && <WalletTab />}
           {tab === "offers" && <OffersTab venueId={venue.id} />}
-          {tab === "more" && <MoreTab profile={profile} onProfile={setProfile} onReplayTour={() => setShowTour(true)} />}
         </main>
 
-        <BottomNav tab={tab} onTab={setTab} />
+        <AppNav />
         <AnimatePresence>{showTour && <HowToPlayTour onClose={closeTour} />}</AnimatePresence>
       </div>
     </Shell>
@@ -398,49 +408,31 @@ function Shell({ style, children }: { style: React.CSSProperties; children: Reac
   );
 }
 
-const NAV: { key: Tab; label: string; icon: ReactNode }[] = [
-  {
-    key: "play",
-    label: "Play",
-    icon: <path d="M12 3a9 9 0 1 0 9 9M12 7v5l3 2" />,
-  },
-  { key: "ranks", label: "Ranks", icon: <path d="M5 20V12M12 20V6M19 20v-5" /> },
-  {
-    key: "wallet",
-    label: "Wallet",
-    icon: <path d="M4 7h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a1 1 0 0 1-1-1V7Zm0 0 11-3v3m1 6h.01" />,
-  },
-  { key: "offers", label: "Offers", icon: <path d="M4 12V5a1 1 0 0 1 1-1h7l8 8-8 8-8-8Zm4-4h.01" /> },
-  { key: "more", label: "More", icon: <path d="M5 12h.01M12 12h.01M19 12h.01" /> },
+const SECTIONS: { key: Tab; label: string }[] = [
+  { key: "play", label: "Play" },
+  { key: "ranks", label: "Ranks" },
+  { key: "offers", label: "Offers" },
 ];
 
-function BottomNav({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
+function SectionTabs({ tab, onTab }: { tab: Tab; onTab: (t: Tab) => void }) {
   return (
-    <nav
-      className="fixed inset-x-0 bottom-0 z-30 mx-auto max-w-md border-t border-ink/10 bg-black/55 px-2 pb-[max(.5rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl"
-      aria-label="Main"
-    >
-      <ul className="grid grid-cols-5">
-        {NAV.map((n) => {
-          const on = tab === n.key;
+    <div className="sticky top-[4.5rem] z-10 px-5 pb-2 backdrop-blur-md" role="tablist" aria-label="At this bar">
+      <div className="grid grid-cols-3 rounded-xl bg-black/30 p-1">
+        {SECTIONS.map((s) => {
+          const on = tab === s.key;
           return (
-            <li key={n.key}>
-              <button
-                onClick={() => onTab(n.key)}
-                aria-current={on ? "page" : undefined}
-                className={`flex w-full flex-col items-center gap-1 rounded-xl py-1.5 text-xs font-semibold ${
-                  on ? "text-brand" : "text-ink/60"
-                }`}
-              >
-                <svg viewBox="0 0 24 24" className="size-6" fill="none" stroke="currentColor" strokeWidth={on ? 2.4 : 1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  {n.icon}
-                </svg>
-                {n.label}
-              </button>
-            </li>
+            <button
+              key={s.key}
+              role="tab"
+              aria-selected={on}
+              onClick={() => onTab(s.key)}
+              className={`rounded-lg py-2.5 font-semibold ${on ? "bg-brand text-on-brand" : "text-ink/70"}`}
+            >
+              {s.label}
+            </button>
           );
         })}
-      </ul>
-    </nav>
+      </div>
+    </div>
   );
 }

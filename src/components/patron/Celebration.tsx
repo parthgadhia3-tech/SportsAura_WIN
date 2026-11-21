@@ -119,7 +119,7 @@ export function Celebration({
 
       {coupon && extra > 0 && (
         <p className="mt-4 text-center text-[17px] font-semibold text-brand-2">
-          +{extra} more {extra === 1 ? "reward" : "rewards"} saved to your wallet
+          +{extra} more {extra === 1 ? "reward" : "rewards"} saved in Rewards
         </p>
       )}
 
@@ -129,7 +129,7 @@ export function Celebration({
         animate={{ opacity: 1 }}
         transition={{ delay: coupon ? 1.3 : 0.6 }}
       >
-        <PrimaryButton onClick={onClose}>{coupon ? "Saved to wallet. Done" : "Done"}</PrimaryButton>
+        <PrimaryButton onClick={onClose}>{coupon ? "Saved in Rewards. Done" : "Done"}</PrimaryButton>
       </motion.div>
     </motion.div>
   );

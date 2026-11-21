@@ -169,7 +169,15 @@ export const buzz = (ms: number | number[]) => {
 };
 
 // ---------------------------------------------------------------- sign-in gate
-export function PlayShell({ children }: { children: (ctx: { profile: Profile }) => ReactNode }) {
+export function PlayShell({
+  children,
+  heading = "Quiz your friends. Anywhere.",
+  intro = "Free trivia rooms for your group: cricket, Bollywood, current affairs or any topic you like. Your mobile number is your login.",
+}: {
+  children: (ctx: { profile: Profile }) => ReactNode;
+  heading?: string;
+  intro?: string;
+}) {
   const [session, setSession] = useState<Session | null | undefined>(undefined);
   const [profile, setProfile] = useState<Profile | null | undefined>(undefined);
 
@@ -198,10 +206,7 @@ export function PlayShell({ children }: { children: (ctx: { profile: Profile }) 
   if (session === undefined || (session && profile === undefined)) body = <Spinner label="Opening" />;
   else if (!session)
     body = (
-      <PhoneLogin
-        heading="Quiz your friends. Anywhere."
-        intro="Free trivia rooms for your group: cricket, Bollywood, current affairs or any topic you like. Your mobile number is your login."
-      />
+      <PhoneLogin heading={heading} intro={intro} />
     );
   else if (!profile) body = <Onboarding onDone={setProfile} />;
   else body = children({ profile });

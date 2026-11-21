@@ -70,6 +70,6 @@ export const HOW_TO_PLAY = [
   },
   {
     title: "Collect rewards",
-    body: "Right answers can win rewards from the venue and its partners. They're saved to your wallet with a code to show staff.",
+    body: "Right answers can win rewards from the venue and its partners. They're saved in Rewards with a code to show staff.",
   },
 ];

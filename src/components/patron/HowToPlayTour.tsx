@@ -199,7 +199,7 @@ function RewardArt({ reduce }: ArtProps) {
   return (
     <div className="flex h-[250px] items-center justify-center">
       <Phone>
-        <p className="mb-2 px-1 font-display text-sm font-bold">Wallet</p>
+        <p className="mb-2 px-1 font-display text-sm font-bold">Rewards</p>
         <motion.div
           className="overflow-hidden rounded-xl bg-ink text-[color:var(--brand-surface)]"
           initial={reduce ? false : { y: -120, rotate: -6, opacity: 0 }}
@@ -243,7 +243,7 @@ const STEPS: Step[] = [
   },
   {
     title: "Win rewards",
-    body: "Some questions carry a reward. The fastest right answers win it, straight into your wallet.",
+    body: "Some questions carry a reward. The fastest right answers win it, straight into Rewards.",
     Art: RewardArt,
   },
 ];
