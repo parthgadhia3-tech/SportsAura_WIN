@@ -19,7 +19,7 @@ export function friendlyError(raw: unknown): string {
     wrong_pin: "That PIN doesn't match. Check the TV screen or ask your server.",
     qr_expired: "That TV code has changed. Scan the QR on the TV again.",
     too_many_attempts: "Too many wrong PINs. Try again in 10 minutes.",
-    not_published: "Publish this match in Set up before starting it.",
+    not_published: "Publish this event in Review & publish before starting it.",
     match_is_live: "End the match before unpublishing it.",
     match_not_live: "There's no live match right now.",
     venue_not_found: "This venue isn't active. Ask the staff for help.",

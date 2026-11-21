@@ -315,7 +315,7 @@ export function RewardsPanel() {
       {s.node}
       <Card title="Reward sets">
         <p className="mb-3 text-sm text-[#5b6865]">
-          A set is a numbered list of coupons (Z1, Z2, ...). Attach it to a match in Set up, step 3, and every right answer
+          A set is a numbered list of coupons (Z1, Z2, ...). Attach it to a match in Event creation or Event configuration and every right answer
           wins one coupon automatically: event coupons when their rule fires, otherwise a random one.
         </p>
         <div className="flex flex-wrap items-start gap-4">

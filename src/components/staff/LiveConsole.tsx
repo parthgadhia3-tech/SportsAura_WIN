@@ -341,7 +341,7 @@ export function LiveConsole({ fixedMatchId }: { fixedMatchId?: string } = {}) {
               </div>
             </>
           )}
-          {!matches.length && <p className="mt-2 text-sm text-[#5b6865]">No published matches yet. Set one up and publish it in 1. Set up.</p>}
+          {!matches.length && <p className="mt-2 text-sm text-[#5b6865]">No published events yet. Publish one in Review & publish.</p>}
         </div>
 
         <form
