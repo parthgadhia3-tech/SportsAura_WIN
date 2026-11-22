@@ -21,20 +21,17 @@ import {
 } from "@/components/staff/SetupFlow";
 import {
   AnalyticsPanel,
-  OffersPanel,
   PacksPanel,
   TriviaPanel,
   SponsorsPanel,
   AuditPanel,
-  RewardsPanel,
   SettingsPanel,
   StaffPanel,
   ThemesPanel,
-  VenuesPanel,
 } from "@/components/staff/AdminPanels";
 
-type CommonKey = "packs" | "rewards" | "sponsors" | "trivia" | "themes" | "offers" | "analytics";
-type AdminKey = "venues" | "staff" | "audit" | "settings";
+type CommonKey = "packs" | "sponsors" | "trivia" | "themes" | "analytics";
+type AdminKey = "staff" | "audit" | "settings";
 type Section = StepKey | CommonKey | AdminKey;
 
 const STEPS: { key: StepKey; n: number; label: string; group: "series" | "event" }[] = [
@@ -46,17 +43,15 @@ const STEPS: { key: StepKey; n: number; label: string; group: "series" | "event"
   { key: "event-publish", n: 6, label: "Review & publish", group: "event" },
   { key: "event-live", n: 7, label: "Live control", group: "event" },
 ];
+// Rewards, offers and venues are switched off for now (play from anywhere, points only).
 const COMMON: { key: CommonKey; label: string }[] = [
   { key: "packs", label: "Question packs" },
-  { key: "rewards", label: "Rewards & reward sets" },
-  { key: "sponsors", label: "Sponsors & report" },
+  { key: "sponsors", label: "Sponsors" },
   { key: "themes", label: "All themes" },
-  { key: "offers", label: "Offer banners" },
   { key: "trivia", label: "Trivia rooms" },
   { key: "analytics", label: "Analytics" },
 ];
 const ADMIN: { key: AdminKey; label: string }[] = [
-  { key: "venues", label: "Venues & billing" },
   { key: "staff", label: "Staff" },
   { key: "audit", label: "Audit log" },
   { key: "settings", label: "Settings" },
@@ -291,13 +286,10 @@ function Console({ staff }: { staff: StaffMember }) {
               {section === "event-live" && p.ev && (p.ev.status === "ended" ? <EndedNote /> : <LiveConsole key={p.ev.id} fixedMatchId={p.ev.id} />)}
 
               {section === "packs" && <PacksPanel />}
-              {section === "rewards" && <RewardsPanel />}
-              {section === "sponsors" && <SponsorsPanel isAdmin={isAdmin} />}
+              {section === "sponsors" && <SponsorsPanel />}
               {section === "themes" && <ThemesPanel />}
-              {section === "offers" && <OffersPanel />}
               {section === "trivia" && <TriviaPanel isAdmin={isAdmin} />}
               {section === "analytics" && <AnalyticsPanel />}
-              {isAdmin && section === "venues" && <VenuesPanel />}
               {isAdmin && section === "staff" && <StaffPanel />}
               {isAdmin && section === "audit" && <AuditPanel />}
               {isAdmin && section === "settings" && <SettingsPanel />}

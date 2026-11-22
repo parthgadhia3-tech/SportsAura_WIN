@@ -16,7 +16,6 @@ type MatchRow = {
   match_id: string;
   match_title: string;
   played_at: string;
-  venue_name: string;
   points: number;
   finish: number;
   players: number;
@@ -49,7 +48,7 @@ export function MyRecord() {
     ["Points", rec.total_points.toLocaleString("en-IN")],
     ["Matches", String(rec.matches_played)],
     ["Accuracy", accuracy == null ? "–" : `${accuracy}%`],
-    ["Rewards", String(rec.rewards_won)],
+    ["Right answers", String(rec.correct)],
   ];
 
   return (
@@ -66,7 +65,7 @@ export function MyRecord() {
         ))}
       </dl>
       <p className="text-sm text-ink/60">
-        {rec.best_finish ? `Best finish: ${ordinal(rec.best_finish)} at a venue. ` : ""}
+        {rec.best_finish ? `Best finish: ${ordinal(rec.best_finish)} in a match. ` : ""}
         {rec.correct} of {rec.predictions} predictions right. Playing since{" "}
         {new Date(rec.member_since).toLocaleDateString("en-IN", { month: "short", year: "numeric" })}.
       </p>
@@ -78,7 +77,7 @@ export function MyRecord() {
               <div className="min-w-0">
                 <p className="truncate font-semibold">{h.match_title}</p>
                 <p className="truncate text-sm text-ink/60">
-                  {new Date(h.played_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })}, {h.venue_name},{" "}
+                  {new Date(h.played_at).toLocaleDateString("en-IN", { day: "numeric", month: "short" })},{" "}
                   {h.correct}/{h.predictions} right
                 </p>
               </div>

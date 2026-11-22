@@ -73,12 +73,12 @@ export interface RewardSet {
 export interface Question {
   id: string;
   match_id: string;
-  venue_id: string | null;
+  venue_id?: string | null;
   prompt: string;
   options: string[];
   correct_option: number | null;
-  points: number;
-  coupon_bucket_id: string | null;
+  points?: number;
+  coupon_bucket_id?: string | null;
   answer_window_s: number;
   status: QuestionStatus;
   pushed_at: string | null;

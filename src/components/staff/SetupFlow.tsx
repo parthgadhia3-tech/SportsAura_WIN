@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/lib/supabase";
 import { friendlyError } from "@/lib/copy";
-import type { Match, RewardSet, Series, Sponsor, Theme } from "@/lib/types";
+import type { Match, Series, Sponsor, Theme } from "@/lib/types";
 import { ThemeEditor, ThemePreview } from "./AdminPanels";
 import { ImageUpload } from "./ImageUpload";
 
@@ -25,8 +25,6 @@ export const CHECK_LABEL: Record<string, { label: string; step: StepKey }> = {
   theme_logo: { label: "Theme sponsor logo uploaded", step: "series-theme" },
   match_title: { label: "Event has a title", step: "event-config" },
   match_dates: { label: "Event date falls inside the series dates", step: "event-config" },
-  rewards: { label: "Rewards chosen for the event", step: "event-config" },
-  reward_set: { label: "Reward set picked", step: "event-config" },
 };
 
 // ---------------------------------------------------------------- shared data
@@ -34,28 +32,25 @@ export type SetupData = {
   series: Series[];
   themes: Theme[];
   sponsors: Sponsor[];
-  sets: RewardSet[];
   matches: Match[];
   loaded: boolean;
   reload: () => Promise<void>;
 };
 
 export function useSetupData(): SetupData {
-  const [d, setD] = useState<Omit<SetupData, "reload">>({ series: [], themes: [], sponsors: [], sets: [], matches: [], loaded: false });
+  const [d, setD] = useState<Omit<SetupData, "reload">>({ series: [], themes: [], sponsors: [], matches: [], loaded: false });
   const reload = useCallback(async () => {
     const sb = supabase();
-    const [{ data: se }, { data: th }, { data: sp }, { data: rs }, { data: ms }] = await Promise.all([
+    const [{ data: se }, { data: th }, { data: sp }, { data: ms }] = await Promise.all([
       sb.from("series").select("*").order("starts_on", { ascending: false }),
       sb.from("themes").select("*").order("name"),
       sb.from("sponsors").select("*").order("name"),
-      sb.from("reward_sets").select("*").eq("is_active", true).order("code"),
       sb.from("matches").select("*").order("starts_at"),
     ]);
     setD({
       series: (se as Series[]) ?? [],
       themes: (th as Theme[]) ?? [],
       sponsors: (sp as Sponsor[]) ?? [],
-      sets: (rs as RewardSet[]) ?? [],
       matches: (ms as Match[]) ?? [],
       loaded: true,
     });
@@ -78,8 +73,7 @@ export function progress(d: SetupData, seriesId: string | null, eventId: string 
   const themed = seriesConfigured && !!theme && (!theme.sponsor_name || !!theme.logo_url);
   const eventCreated = themed && !!ev;
   const evStart = ev ? new Date(new Date(ev.starts_at).getTime() + 330 * 60000).toISOString().slice(0, 10) : "";
-  const eventConfigured =
-    eventCreated && !!ev && ev.title.trim().length >= 3 && !!ev.reward_mode && (ev.reward_mode !== "set" || !!ev.reward_set_id) && !!s && evStart >= s.starts_on && evStart <= s.ends_on;
+  const eventConfigured = eventCreated && !!ev && ev.title.trim().length >= 3 && !!s && evStart >= s.starts_on && evStart <= s.ends_on;
   const published = !!ev?.published_at;
   return { s, sponsor, theme, events, ev, done: { seriesCreated, seriesConfigured, themed, eventCreated, eventConfigured, published } };
 }
@@ -188,7 +182,6 @@ export function SeriesConfig({ d, current, onSaved }: { d: SetupData; current: S
 
 function SeriesSummary({ d, s }: { d: SetupData; s: Series }) {
   const sponsor = d.sponsors.find((x) => x.id === s.sponsor_id);
-  const set = d.sets.find((x) => x.id === s.reward_set_id);
   const row = (k: string, v: ReactNode) => (
     <div className="flex justify-between gap-3 border-t border-[#eef1ef] py-2 text-sm">
       <span className="text-[#5b6865]">{k}</span>
@@ -213,7 +206,6 @@ function SeriesSummary({ d, s }: { d: SetupData; s: Series }) {
           <span className="text-red-700">Not chosen</span>
         ),
       )}
-      {row("Default reward set", set ? `Set ${set.code}` : "None")}
       {row("Theme", d.themes.find((t) => t.id === s.theme_id)?.name ?? <span className="text-amber-700">Next step</span>)}
     </div>
   );
@@ -226,7 +218,6 @@ function SeriesForm({ d, current, onSaved, title }: { d: SetupData; current: Ser
     starts_on: current?.starts_on ?? "",
     ends_on: current?.ends_on ?? "",
     sponsor: current ? (current.no_sponsor ? "none" : current.sponsor_id ?? "") : "",
-    reward_set_id: current?.reward_set_id ?? "",
   });
   const [newSp, setNewSp] = useState<{ name: string; logo_url: string | null; tagline: string; link_url: string } | null>(null);
   const s = useStatus();
@@ -259,14 +250,13 @@ function SeriesForm({ d, current, onSaved, title }: { d: SetupData; current: Ser
       ends_on: f.ends_on,
       sponsor_id: f.sponsor === "none" ? null : f.sponsor,
       no_sponsor: f.sponsor === "none",
-      reward_set_id: f.reward_set_id || null,
     };
     const sb = supabase();
     const { data, error } = current ? await sb.from("series").update(row).eq("id", current.id).select().single() : await sb.from("series").insert(row).select().single();
     if (error) return s.fail(error.message.includes("series_dates") ? "The last day is before the first day." : error);
     await d.reload();
     s.ok(current ? "Series saved." : "Series created and selected.");
-    if (!current) setF({ name: "", sport: "cricket", starts_on: "", ends_on: "", sponsor: "", reward_set_id: "" });
+    if (!current) setF({ name: "", sport: "cricket", starts_on: "", ends_on: "", sponsor: "" });
     onSaved((data as Series).id);
   }
 
@@ -322,13 +312,6 @@ function SeriesForm({ d, current, onSaved, title }: { d: SetupData; current: Ser
             <p className="text-xs text-[#5b6865]">No alcohol brands as sponsors: surrogate alcohol advertising rules apply.</p>
           </div>
         )}
-        <label>
-          Default reward set for new events (optional)
-          <select value={f.reward_set_id} onChange={(e) => setF({ ...f, reward_set_id: e.target.value })}>
-            <option value="">None</option>
-            {d.sets.map((x) => <option key={x.id} value={x.id}>Set {x.code}: {x.name}</option>)}
-          </select>
-        </label>
         <div className="flex flex-wrap gap-2">
           <button className="btn btn-dark">{current ? "Save configuration" : "Create series"}</button>
           {current && (
@@ -456,25 +439,21 @@ export function EventCreate({ d, current, selected, onCreated, onSelect }: { d: 
 }
 
 function EventForm({ d, current, match, onSaved }: { d: SetupData; current: Series; match?: Match; onSaved: (id: string) => void }) {
-  type F = { title: string; starts_at: string; reward_mode: "set" | "per_question" | ""; reward_set_id: string };
-  const blank: F = { title: "", starts_at: "", reward_mode: current.reward_set_id ? "set" : "", reward_set_id: current.reward_set_id ?? "" };
-  const [f, setF] = useState<F>(match ? { title: match.title, starts_at: toLocal(match.starts_at), reward_mode: match.reward_mode ?? "", reward_set_id: match.reward_set_id ?? "" } : blank);
+  type F = { title: string; starts_at: string };
+  const blank: F = { title: "", starts_at: "" };
+  const [f, setF] = useState<F>(match ? { title: match.title, starts_at: toLocal(match.starts_at) } : blank);
   const s = useStatus();
   const min = `${current.starts_on}T00:00`;
   const max = `${current.ends_on}T23:59`;
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!f.reward_mode) return s.fail("Choose how this event gives rewards.");
-    if (f.reward_mode === "set" && !f.reward_set_id) return s.fail("Pick the reward set.");
     if (f.starts_at < min || f.starts_at > max) return s.fail("The start time is outside the series dates.");
     const row = {
       title: f.title.trim(),
       sport: current.sport,
       starts_at: new Date(f.starts_at).toISOString(),
       series_id: current.id,
-      reward_mode: f.reward_mode,
-      reward_set_id: f.reward_mode === "set" ? f.reward_set_id : null,
     };
     const sb = supabase();
     const { data, error } = match ? await sb.from("matches").update(row).eq("id", match.id).select().single() : await sb.from("matches").insert(row).select().single();
@@ -489,24 +468,7 @@ function EventForm({ d, current, match, onSaved }: { d: SetupData; current: Seri
     <form onSubmit={save} className="flex flex-col gap-3">
       <label>Event title<input required minLength={3} value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="e.g. IND vs WI, 1st T20I" /></label>
       <label>Starts at (India time)<input required type="datetime-local" min={min} max={max} value={f.starts_at} onChange={(e) => setF({ ...f, starts_at: e.target.value })} /></label>
-      <fieldset className="flex flex-col gap-2 rounded-lg border border-[#d8dedb] p-3">
-        <legend className="px-1 text-sm font-bold">Rewards</legend>
-        <label className="!flex items-center gap-2 !font-normal">
-          <input type="radio" className="!mt-0 !w-auto" checked={f.reward_mode === "set"} onChange={() => setF({ ...f, reward_mode: "set" })} />
-          A reward set: every right answer can win a coupon
-        </label>
-        {f.reward_mode === "set" && (
-          <select value={f.reward_set_id} onChange={(e) => setF({ ...f, reward_set_id: e.target.value })}>
-            <option value="">Pick a set</option>
-            {d.sets.map((x) => <option key={x.id} value={x.id}>Set {x.code}: {x.name}</option>)}
-          </select>
-        )}
-        {f.reward_mode === "set" && d.sets.length === 0 && <p className="text-xs text-red-700">No reward sets yet. Make one in Common functions › Rewards first.</p>}
-        <label className="!flex items-center gap-2 !font-normal">
-          <input type="radio" className="!mt-0 !w-auto" checked={f.reward_mode === "per_question"} onChange={() => setF({ ...f, reward_mode: "per_question" })} />
-          Per-question rewards: I attach a reward to some questions while live
-        </label>
-      </fieldset>
+      <p className="text-xs text-[#5b6865]">Every right answer in this event is worth 10 points.</p>
       <button className="btn btn-dark">{match ? "Save configuration" : "Create event"}</button>
       {s.node}
     </form>
@@ -576,7 +538,7 @@ export function PublishStep({ d, ev, onGo }: { d: SetupData; ev: Match; onGo: (k
   const ready = missing?.length === 0;
   const ser = d.series.find((x) => x.id === ev.series_id);
   const th = d.themes.find((t) => t.id === (ev.theme_id ?? ser?.theme_id));
-  const hidden = ["sponsor_paused", "reward_set", "series", ...(ser?.no_sponsor ? ["sponsor_logo"] : []), ...(th && !th.sponsor_name ? ["theme_logo"] : [])];
+  const hidden = ["sponsor_paused", "series", ...(ser?.no_sponsor ? ["sponsor_logo"] : []), ...(th && !th.sponsor_name ? ["theme_logo"] : [])];
   const keys = Object.keys(CHECK_LABEL).filter((k) => !hidden.includes(k) || missing?.includes(k));
   return (
     <Panel title="Review & publish" intro="Every item must be green before the event can be published. Once published, it can be started from Live control." aside={<span className={`rounded-full px-2 py-0.5 text-xs font-bold ${st.cls}`}>{st.label}</span>}>

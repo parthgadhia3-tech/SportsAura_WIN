@@ -23,10 +23,10 @@ export function Onboarding({ onDone }: { onDone: (p: Profile) => void }) {
     setError("");
     const { data, error } = await supabase().rpc("complete_onboarding", {
       p_display_name: name.trim(),
-      // One combined statement, recorded against each requirement it covers.
+      // One combined statement: 18+ and the terms. (The parameter keeps its old name.)
       p_age_21: agreed,
-      p_age_25: false, // confirmed later under More > Me, only needed for spirits rewards
-      p_location_consent: agreed,
+      p_age_25: false,
+      p_location_consent: false,
       p_terms_accepted: agreed,
       p_marketing: marketing,
       p_terms_version: TERMS_VERSION,
@@ -52,15 +52,14 @@ export function Onboarding({ onDone }: { onDone: (p: Profile) => void }) {
 
       <div className="flex flex-col gap-3">
         <Check checked={agreed} onChange={setAgreed} required>
-          I&apos;m 21 or older, I agree to a quick location check to confirm I&apos;m at the venue (my
-          coordinates are never stored), and I accept the{" "}
+          I&apos;m 18 or older and I accept the{" "}
           <button type="button" className="font-semibold text-brand underline" onClick={() => setShowTerms(true)}>
             Terms and privacy notice
           </button>
           .
         </Check>
         <Check checked={marketing} onChange={setMarketing}>
-          Send me club offers during the match.
+          Send me match reminders and offers.
         </Check>
       </div>
 

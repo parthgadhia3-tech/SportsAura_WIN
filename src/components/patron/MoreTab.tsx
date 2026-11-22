@@ -7,6 +7,7 @@ import type { Profile } from "@/lib/types";
 import { ErrorNote, GhostButton } from "./ui";
 import { TermsBody } from "./TermsSheet";
 import { MyRecord } from "./MyRecord";
+import { GroupsPanel, useMyGroups } from "./Groups";
 
 export function MoreTab({
   profile,
@@ -21,6 +22,7 @@ export function MoreTab({
   const [error, setError] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [busy, setBusy] = useState(false);
+  const { groups, reload } = useMyGroups();
 
   const [offers, setOffers] = useState(Boolean(profile.marketing_consent_at));
   async function toggleOffers(on: boolean) {
@@ -33,12 +35,6 @@ export function MoreTab({
     onProfile({ ...profile, marketing_consent_at: (data as string | null) ?? null });
   }
 
-  async function confirm25() {
-    const { error } = await supabase().rpc("confirm_age_25");
-    if (error) return setError(friendlyError(error));
-    onProfile({ ...profile, age_verified_25: true });
-  }
-
   async function deleteAccount() {
     setBusy(true);
     setError("");
@@ -48,7 +44,7 @@ export function MoreTab({
       headers: { Authorization: `Bearer ${data.session?.access_token ?? ""}` },
     });
     setBusy(false);
-    if (!res.ok) return setError("We couldn't delete your account. Try again or ask the venue staff.");
+    if (!res.ok) return setError("We couldn't delete your account. Please try again in a minute.");
     await supabase().auth.signOut();
     location.reload();
   }
@@ -106,14 +102,13 @@ export function MoreTab({
           <div className="rounded-2xl bg-surface/80 p-4">
             <p className="text-sm text-ink/60">Playing as</p>
             <p className="font-display text-3xl font-bold">{profile.display_name}</p>
-            <p className="mt-2 text-[15px] text-ink/75">
-              {profile.age_verified_25 ? "Confirmed 25+. Eligible for all rewards." : "Confirmed 21+."}
-            </p>
           </div>
+
+          {groups && <GroupsPanel groups={groups} onChanged={reload} />}
 
           <label className="flex cursor-pointer items-center justify-between gap-4 rounded-2xl bg-surface/80 p-4">
             <span>
-              <span className="block font-semibold">Club offers during the match</span>
+              <span className="block font-semibold">Match reminders and offers</span>
               <span className="block text-sm text-ink/60">{offers ? "On. You can switch this off any time." : "Off"}</span>
             </span>
             <input
@@ -126,13 +121,9 @@ export function MoreTab({
             />
           </label>
 
-          {!profile.age_verified_25 && (
-            <GhostButton onClick={confirm25}>I&apos;m 25 or older. Unlock spirits rewards</GhostButton>
-          )}
-
           <GhostButton onClick={() => supabase().auth.signOut().then(() => location.reload())}>Sign out</GhostButton>
           <p className="-mt-2 text-center text-sm text-ink/55">
-            Your points, record and rewards stay saved to your number. Sign in again on any phone to get them back.
+            Your points, record and groups stay saved to your number. Sign in again on any phone to get them back.
           </p>
 
           {!confirmDelete ? (
@@ -142,7 +133,7 @@ export function MoreTab({
           ) : (
             <div className="rounded-2xl border border-red-400/40 p-4">
               <p className="text-[15px]">
-                This permanently deletes your profile, points, answers and rewards. It can&apos;t be undone.
+                This permanently deletes your profile, points, answers and group memberships. It can&apos;t be undone.
               </p>
               <div className="mt-4 flex gap-3">
                 <GhostButton onClick={() => setConfirmDelete(false)}>Keep account</GhostButton>

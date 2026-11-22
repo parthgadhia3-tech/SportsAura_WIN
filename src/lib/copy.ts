@@ -1,11 +1,10 @@
-// Product copy in one place. Vocabulary rule: Predict, Points, Rewards.
+// Product copy in one place. Vocabulary rule: Predict, Points.
 // The build fails (npm run check:copy) if restricted words appear in src/.
 
 export const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "SportsAura";
 export { LEGAL_VERSION as TERMS_VERSION } from "./legal";
 
-export const LIABILITY_LINE =
-  "No purchase necessary. Venue reserves the right to verify ID for alcohol redemption.";
+export const LIABILITY_LINE = "No purchase necessary.";
 
 /** Maps database error codes to plain instructions for the player. */
 export function friendlyError(raw: unknown): string {
@@ -22,6 +21,12 @@ export function friendlyError(raw: unknown): string {
     not_published: "Publish this event in Review & publish before starting it.",
     match_is_live: "End the match before unpublishing it.",
     match_not_live: "There's no live match right now.",
+    group_not_found: "No group matches that code. Check it and try again.",
+    too_many_groups: "You're in 20 groups already. Leave one to join another.",
+    group_full: "This group is full.",
+    age_required: "You need to be 18 or older to play.",
+    name_required: "Add a display name of at least 2 letters.",
+    terms_required: "Accept the terms to continue.",
     venue_not_found: "This venue isn't active. Ask the staff for help.",
     out_of_range: "You don't seem to be at the venue.",
     code_not_found: "No reward matches that code.",
@@ -41,37 +46,28 @@ export function friendlyError(raw: unknown): string {
   return msg || "Something went wrong. Try again.";
 }
 
+/** Every right answer in a live match is worth this many points. */
+export const POINTS_PER_ANSWER = 10;
+
 export const HOW_TO_PLAY = [
   {
-    title: "Check in once",
-    body: "Scan the QR code on the bar's TV and you're in for the whole match. You can also scan your table coaster and share your location, or use the PIN from your server.",
+    title: "Open Live when the match is on",
+    body: "Play from anywhere: at home, at work or out with friends. Sign in once with your mobile number and you're in.",
   },
   {
-    title: "Watch for a question",
-    body: "During the match, a prediction appears on your phone, often before every over. You don't need to refresh.",
+    title: "Answer before the timer ends",
+    body: "Questions pop up on your phone during the match. Tap your answer before the countdown runs out. One pick per question, and it can't be changed.",
   },
   {
-    title: "Lock in before the timer ends",
-    body: "Tap your answer. You get one pick per question, and it can't be changed.",
+    title: "10 points for every right answer",
+    body: "Every right answer is worth 10 points. A wrong or missed answer scores 0. Nothing to buy, and points have no cash value.",
   },
   {
-    title: "Score points when you're right",
-    body: "Correct predictions add points and move you up this bar's leaderboard.",
+    title: "Climb the leaderboards",
+    body: "See where you stand in this match and across the whole series.",
   },
   {
-    title: "Go on a streak",
-    body: "From your 3rd right answer in a row, every right answer earns 10 bonus points. A wrong answer resets the streak; skipping a question doesn't.",
-  },
-  {
-    title: "Use your 2x once a match",
-    body: "Feeling sure? Switch on 2x before you answer and that question's points are doubled if you're right. You get one per match.",
-  },
-  {
-    title: "Play as a table",
-    body: "Pick your table number and your table's best four scores are added up on the table leaderboard.",
-  },
-  {
-    title: "Collect rewards",
-    body: "Right answers can win rewards from the venue and its partners. They're saved in Rewards with a code to show staff.",
+    title: "Make a group with friends",
+    body: "Create a group, share its code, and see a leaderboard of just your group: your friends, your office or your favourite bar.",
   },
 ];

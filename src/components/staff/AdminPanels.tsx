@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { friendlyError } from "@/lib/copy";
 import { DEFAULT_THEME, themeVars } from "@/lib/theme";
 import { ImageUpload } from "./ImageUpload";
-import type { Banner, BillingStatus, Bucket, BgType, CodeMode, Match, QuestionTemplate, RewardRule, RewardSet, Season, Sponsor, Theme, Venue, VenueAccount, VenuePlan } from "@/lib/types";
+import type { Banner, BillingStatus, Bucket, BgType, CodeMode, Match, QuestionTemplate, RewardRule, RewardSet, Sponsor, Theme, Venue, VenueAccount, VenuePlan } from "@/lib/types";
 
 // ---------------------------------------------------------------- helpers
 function useStatus() {
@@ -609,7 +609,7 @@ export function ThemePreview({ t }: { t: Theme }) {
           <img src={t.banner_url} alt="" className="mt-3 aspect-[3/1] w-full rounded-xl object-cover" />
         )}
         <div className="mt-3 rounded-2xl bg-surface/90 p-4">
-          <p className="font-display font-semibold text-brand-2">10 points + Free fries</p>
+          <p className="font-display font-semibold text-brand-2">10 points</p>
           <p className="font-display text-xl font-bold leading-tight">Will the next over go for 10+ runs?</p>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <span className="rounded-xl border-2 border-brand bg-brand px-3 py-2 font-display text-lg font-semibold text-on-brand">Yes</span>
@@ -849,19 +849,13 @@ export function OffersPanel() {
 
 // ---------------------------------------------------------------- staff accounts
 export function StaffPanel() {
-  const [venues, setVenues] = useState<Venue[]>([]);
-  const [staff, setStaff] = useState<{ user_id: string; role: string; venue_id: string | null; name: string | null }[]>([]);
-  const [f, setF] = useState({ name: "", email: "", password: "", role: "venue_manager", venue_id: "" });
+  const [staff, setStaff] = useState<{ user_id: string; role: string; name: string | null }[]>([]);
+  const [f, setF] = useState({ name: "", email: "", password: "", role: "game_master" });
   const s = useStatus();
 
   const load = useCallback(async () => {
-    const sb = supabase();
-    const [{ data: v }, { data: st }] = await Promise.all([
-      sb.from("venues").select("id, name").order("name"),
-      sb.from("staff").select("user_id, role, venue_id, name").order("created_at"),
-    ]);
-    setVenues((v as Venue[]) ?? []);
-    setStaff(st ?? []);
+    const { data } = await supabase().from("staff").select("user_id, role, name").order("created_at");
+    setStaff(data ?? []);
   }, []);
   useEffect(() => {
     load();
@@ -873,12 +867,12 @@ export function StaffPanel() {
     const res = await fetch("/api/admin/staff", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${data.session?.access_token ?? ""}` },
-      body: JSON.stringify({ ...f, venue_id: f.venue_id || null }),
+      body: JSON.stringify({ ...f, venue_id: null }),
     });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) return s.fail(body.error ?? "Couldn't create the account.");
     s.ok("Staff account created. Share the email and password with them.");
-    setF({ name: "", email: "", password: "", role: "venue_manager", venue_id: "" });
+    setF({ name: "", email: "", password: "", role: "game_master" });
     load();
   }
 
@@ -892,33 +886,22 @@ export function StaffPanel() {
           <label>
             Role
             <select value={f.role} onChange={(e) => setF({ ...f, role: e.target.value })}>
-              <option value="venue_manager">Venue manager (PIN, players, redeem)</option>
-              <option value="game_master">Game Master (questions, rewards, themes)</option>
-              <option value="admin">Admin (everything)</option>
+              <option value="game_master">Game Master (series, events, live questions)</option>
+              <option value="admin">Admin (everything, including staff and settings)</option>
             </select>
           </label>
-          {f.role === "venue_manager" && (
-            <label>
-              Venue
-              <select required value={f.venue_id} onChange={(e) => setF({ ...f, venue_id: e.target.value })}>
-                <option value="">Pick a venue</option>
-                {venues.map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
-              </select>
-            </label>
-          )}
           <button className="btn btn-dark">Create account</button>
           {s.node}
         </form>
       </Card>
       <Card title="Staff">
         <table className="w-full text-sm">
-          <thead className="text-left text-[#5b6865]"><tr><th className="py-1">Name</th><th>Role</th><th>Venue</th></tr></thead>
+          <thead className="text-left text-[#5b6865]"><tr><th className="py-1">Name</th><th>Role</th></tr></thead>
           <tbody>
             {staff.map((x) => (
               <tr key={x.user_id} className="border-t border-[#eef1ef]">
                 <td className="py-2">{x.name ?? x.user_id.slice(0, 8)}</td>
-                <td>{x.role.replace("_", " ")}</td>
-                <td>{venues.find((v) => v.id === x.venue_id)?.name ?? "All"}</td>
+                <td className="capitalize">{x.role.replace("_", " ")}</td>
               </tr>
             ))}
           </tbody>
@@ -929,71 +912,72 @@ export function StaffPanel() {
 }
 
 // ---------------------------------------------------------------- analytics
+type MatchStat = { match_id: string; title: string; series: string | null; status: string; starts_at: string; players: number; answers: number; correct: number; questions: number };
+type Totals = { players: number; players_7d: number; groups: number; group_members: number };
+
 export function AnalyticsPanel() {
-  const [rows, setRows] = useState<{ id: string; title: string; brand: string; issued: number; clicks: number; uniq: number }[]>([]);
-  const [days, setDays] = useState(30);
+  const [rows, setRows] = useState<MatchStat[] | null>(null);
+  const [totals, setTotals] = useState<Totals | null>(null);
 
   useEffect(() => {
-    (async () => {
-      const sb = supabase();
-      const since = new Date(Date.now() - days * 86400000).toISOString();
-      const [{ data: b }, { data: c }] = await Promise.all([
-        sb.from("coupon_buckets").select("id, title, brand_name, issued_count"),
-        sb.from("click_analytics").select("bucket_id, user_id").gte("clicked_at", since).limit(50000),
-      ]);
-      const clicks = new Map<string, { n: number; users: Set<string> }>();
-      for (const r of (c as { bucket_id: string; user_id: string | null }[]) ?? []) {
-        const e = clicks.get(r.bucket_id) ?? { n: 0, users: new Set<string>() };
-        e.n++;
-        if (r.user_id) e.users.add(r.user_id);
-        clicks.set(r.bucket_id, e);
-      }
-      setRows(
-        ((b as { id: string; title: string; brand_name: string; issued_count: number }[]) ?? [])
-          .map((x) => ({ id: x.id, title: x.title, brand: x.brand_name, issued: x.issued_count, clicks: clicks.get(x.id)?.n ?? 0, uniq: clicks.get(x.id)?.users.size ?? 0 }))
-          .sort((a, z) => z.clicks - a.clicks),
-      );
-    })();
-  }, [days]);
+    const sb = supabase();
+    sb.rpc("admin_match_stats", { p_limit: 50 }).then(({ data }) => setRows((data as MatchStat[]) ?? []));
+    sb.rpc("admin_totals").then(({ data }) => setTotals(((data as Totals[]) ?? [])[0] ?? null));
+  }, []);
 
   const csv = () => {
-    const lines = [["Reward", "Brand", "Issued (all time)", `Clicks (${days}d)`, `Unique clickers (${days}d)`], ...rows.map((r) => [r.title, r.brand, r.issued, r.clicks, r.uniq])];
+    const lines = [
+      ["Event", "Series", "Status", "Starts", "Players", "Questions", "Answers", "Right answers", "Accuracy %"],
+      ...(rows ?? []).map((r) => [r.title, r.series ?? "", r.status, new Date(r.starts_at).toISOString(), r.players, r.questions, r.answers, r.correct, r.answers ? Math.round((r.correct / r.answers) * 100) : ""]),
+    ];
     const blob = new Blob([lines.map((l) => l.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n")], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `reward-clicks-${days}d.csv`;
+    a.download = "sportsaura-events.csv";
     a.click();
   };
 
+  const tile = (label: string, v: number | undefined) => (
+    <div className="rounded-xl border border-[#d8dedb] bg-white p-4">
+      <p className="text-sm text-[#5b6865]">{label}</p>
+      <p className="tabular text-3xl font-bold">{v ?? "–"}</p>
+    </div>
+  );
+
   return (
-    <Card
-      title="Reward performance"
-      aside={
-        <span className="flex gap-2">
-          <select className="!w-32" value={days} onChange={(e) => setDays(Number(e.target.value))}>
-            {[1, 7, 30, 90].map((d) => <option key={d} value={d}>Last {d} days</option>)}
-          </select>
-          <button className="btn btn-line" onClick={csv}>Export CSV</button>
-        </span>
-      }
-    >
-      <table className="w-full text-sm">
-        <thead className="text-left text-[#5b6865]">
-          <tr><th className="py-1">Reward</th><th>Issued</th><th>Clicks</th><th>Unique</th><th>Click rate</th></tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr key={r.id} className="tabular border-t border-[#eef1ef]">
-              <td className="py-2"><span className="font-semibold">{r.title}</span> <span className="text-[#5b6865]">{r.brand}</span></td>
-              <td>{r.issued}</td>
-              <td>{r.clicks}</td>
-              <td>{r.uniq}</td>
-              <td>{r.issued ? `${Math.round((r.uniq / r.issued) * 100)}%` : "–"}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </Card>
+    <div className="flex flex-col gap-5">
+      <div className="grid gap-3 sm:grid-cols-4">
+        {tile("Registered players", totals?.players)}
+        {tile("Played in the last 7 days", totals?.players_7d)}
+        {tile("Groups", totals?.groups)}
+        {tile("Group memberships", totals?.group_members)}
+      </div>
+      <Card title="Events" aside={<button className="btn btn-line" onClick={csv} disabled={!rows?.length}>Export CSV</button>}>
+        <table className="w-full text-sm">
+          <thead className="text-left text-[#5b6865]">
+            <tr><th className="py-1">Event</th><th>Status</th><th>Players</th><th>Questions</th><th>Answers</th><th>Accuracy</th></tr>
+          </thead>
+          <tbody>
+            {(rows ?? []).map((r) => (
+              <tr key={r.match_id} className="tabular border-t border-[#eef1ef]">
+                <td className="py-2">
+                  <span className="block font-semibold">{r.title}</span>
+                  <span className="block text-xs text-[#5b6865]">
+                    {r.series ?? "No series"} · {new Date(r.starts_at).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+                  </span>
+                </td>
+                <td className="capitalize">{r.status}</td>
+                <td>{r.players}</td>
+                <td>{r.questions}</td>
+                <td>{r.answers}</td>
+                <td>{r.answers ? `${Math.round((r.correct / r.answers) * 100)}%` : "–"}</td>
+              </tr>
+            ))}
+            {rows?.length === 0 && <tr><td colSpan={6} className="py-6 text-center text-[#5b6865]">No published events yet.</td></tr>}
+          </tbody>
+        </table>
+      </Card>
+    </div>
   );
 }
 
@@ -1167,7 +1151,7 @@ export function AuditPanel() {
 }
 
 // ---------------------------------------------------------------- question packs
-const EMPTY_TPL = { id: "", pack: "", sport: "cricket", prompt: "", options: "Yes\nNo", points: 10, answer_window_s: 30 };
+const EMPTY_TPL = { id: "", pack: "", sport: "cricket", prompt: "", options: "Yes\nNo", answer_window_s: 30 };
 
 export function PacksPanel() {
   const [rows, setRows] = useState<QuestionTemplate[]>([]);
@@ -1187,7 +1171,7 @@ export function PacksPanel() {
     e.preventDefault();
     const options = f.options.split("\n").map((o) => o.trim()).filter(Boolean);
     if (options.length < 2 || options.length > 6) return s.fail("Give 2 to 6 options, one per line.");
-    const row = { pack: f.pack.trim(), sport: f.sport, prompt: f.prompt.trim(), options, points: f.points, answer_window_s: f.answer_window_s };
+    const row = { pack: f.pack.trim(), sport: f.sport, prompt: f.prompt.trim(), options, points: 10, answer_window_s: f.answer_window_s };
     const { error } = f.id
       ? await supabase().from("question_templates").update(row).eq("id", f.id)
       : await supabase().from("question_templates").insert({ ...row, sort_order: rows.filter((r) => r.pack === row.pack).length + 1 });
@@ -1223,7 +1207,6 @@ export function PacksPanel() {
           <label>Options, one per line<textarea rows={4} value={f.options} onChange={(e) => setF({ ...f, options: e.target.value })} /></label>
           <p className="text-xs text-[#5b6865]">{"{over}"} becomes the current over. {"{home}"} and {"{away}"} become the teams from the match title (&quot;Mumbai vs Chennai&quot;).</p>
           <div className="grid grid-cols-2 gap-3">
-            <label>Points<input type="number" min={1} max={1000} value={f.points} onChange={(e) => setF({ ...f, points: Number(e.target.value) })} /></label>
             <label>Answer window
               <select value={f.answer_window_s} onChange={(e) => setF({ ...f, answer_window_s: Number(e.target.value) })}>
                 {[15, 20, 30, 45, 60, 90].map((x) => <option key={x} value={x}>{x} seconds</option>)}
@@ -1251,10 +1234,10 @@ export function PacksPanel() {
                 <li key={t.id} className={`flex items-center justify-between gap-3 px-3 py-2 text-sm ${t.is_active ? "" : "opacity-50"}`}>
                   <span className="min-w-0">
                     <span className="block truncate font-semibold">{t.prompt}</span>
-                    <span className="block truncate text-[#5b6865]">{t.options.join(" / ")} · {t.points} pts · {t.answer_window_s}s</span>
+                    <span className="block truncate text-[#5b6865]">{t.options.join(" / ")} · {t.answer_window_s}s</span>
                   </span>
                   <span className="flex shrink-0 gap-2">
-                    <button className="btn btn-line !py-1" onClick={() => setF({ id: t.id, pack: t.pack, sport: t.sport, prompt: t.prompt, options: t.options.join("\n"), points: t.points, answer_window_s: t.answer_window_s })}>Edit</button>
+                    <button className="btn btn-line !py-1" onClick={() => setF({ id: t.id, pack: t.pack, sport: t.sport, prompt: t.prompt, options: t.options.join("\n"), answer_window_s: t.answer_window_s })}>Edit</button>
                     <button className="btn btn-line !py-1" onClick={() => toggle(t)}>{t.is_active ? "Pause" : "Use"}</button>
                   </span>
                 </li>
@@ -1273,7 +1256,7 @@ export function PacksPanel() {
 const EMPTY_SPONSOR = { id: "", name: "", logo_url: "", tagline: "", link_url: "" };
 type SponsorStat = { sponsor_id: string; sponsor: string; questions: number; plays: number; players: number; venues: number; matches: number };
 
-export function SponsorsPanel({ isAdmin }: { isAdmin: boolean }) {
+export function SponsorsPanel() {
   const [rows, setRows] = useState<Sponsor[]>([]);
   const [stats, setStats] = useState<SponsorStat[]>([]);
   const [days, setDays] = useState(30);
@@ -1306,7 +1289,7 @@ export function SponsorsPanel({ isAdmin }: { isAdmin: boolean }) {
 
   const stat = (id: string) => stats.find((x) => x.sponsor_id === id);
   const csv = () => {
-    const lines = [["Sponsor", "Questions", "Plays", "Unique players", "Venues", "Matches"], ...stats.map((r) => [r.sponsor, r.questions, r.plays, r.players, r.venues, r.matches])];
+    const lines = [["Sponsor", "Questions", "Plays", "Unique players", "Matches"], ...stats.map((r) => [r.sponsor, r.questions, r.plays, r.players, r.matches])];
     const blob = new Blob([lines.map((l) => l.map((v) => `"${String(v).replace(/"/g, '""')}"`).join(",")).join("\n")], { type: "text/csv" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
@@ -1339,10 +1322,10 @@ export function SponsorsPanel({ isAdmin }: { isAdmin: boolean }) {
             </span>
           }
         >
-          <p className="mb-3 text-sm text-[#5b6865]">What each brand got: sponsored questions, answers given while their name was on screen, unique players and venues. Send this to the brand.</p>
+          <p className="mb-3 text-sm text-[#5b6865]">What each brand got: sponsored questions, answers given while their name was on screen, and unique players. Send this to the brand.</p>
           <table className="w-full text-sm">
             <thead className="text-left text-[#5b6865]">
-              <tr><th className="py-1">Sponsor</th><th>Questions</th><th>Plays</th><th>Players</th><th>Venues</th><th></th></tr>
+              <tr><th className="py-1">Sponsor</th><th>Questions</th><th>Plays</th><th>Players</th><th></th></tr>
             </thead>
             <tbody>
               {rows.map((r) => {
@@ -1353,7 +1336,6 @@ export function SponsorsPanel({ isAdmin }: { isAdmin: boolean }) {
                     <td>{x?.questions ?? 0}</td>
                     <td>{x?.plays ?? 0}</td>
                     <td>{x?.players ?? 0}</td>
-                    <td>{x?.venues ?? 0}</td>
                     <td className="text-right">
                       <button className="btn btn-line !py-1" onClick={() => setF({ id: r.id, name: r.name, logo_url: r.logo_url ?? "", tagline: r.tagline ?? "", link_url: r.link_url ?? "" })}>Edit</button>{" "}
                       <button className="btn btn-line !py-1" onClick={async () => { await supabase().from("sponsors").update({ is_active: !r.is_active }).eq("id", r.id); load(); }}>
@@ -1368,86 +1350,6 @@ export function SponsorsPanel({ isAdmin }: { isAdmin: boolean }) {
           </table>
         </Card>
       </div>
-      <SeasonsCard sponsors={rows} isAdmin={isAdmin} />
-    </div>
-  );
-}
-
-const EMPTY_SEASON = { id: "", name: "", city: "Mumbai", starts_on: "", ends_on: "", prize_text: "", prize_terms_url: "", sponsor_id: "" };
-
-function SeasonsCard({ sponsors, isAdmin }: { sponsors: Sponsor[]; isAdmin: boolean }) {
-  const [rows, setRows] = useState<Season[]>([]);
-  const [f, setF] = useState(EMPTY_SEASON);
-  const s = useStatus();
-  const load = useCallback(async () => {
-    const { data } = await supabase().from("seasons").select("*").order("starts_on", { ascending: false });
-    setRows((data as Season[]) ?? []);
-  }, []);
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    if (f.prize_text.trim() && !f.prize_terms_url.trim() && !confirm("A prize without a terms link is risky. Have a lawyer approve prize terms first. Save anyway?")) return;
-    const clean = (v: string) => v.trim() || null;
-    const row = { name: f.name.trim(), city: f.city.trim(), starts_on: f.starts_on, ends_on: f.ends_on, prize_text: clean(f.prize_text), prize_terms_url: clean(f.prize_terms_url), sponsor_id: f.sponsor_id || null };
-    const { error } = f.id ? await supabase().from("seasons").update(row).eq("id", f.id) : await supabase().from("seasons").insert(row);
-    if (error) return s.fail(error.message.includes("dates") ? "The end date must be after the start date." : error.message.includes("url") ? "Links must start with https://" : error);
-    s.ok("Season saved.");
-    setF(EMPTY_SEASON);
-    load();
-  }
-
-  return (
-    <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
-      <Card title={f.id ? "Edit city season" : "New city season"}>
-        {!isAdmin ? (
-          <p className="text-sm text-[#5b6865]">Only admins can set up city seasons.</p>
-        ) : (
-          <form onSubmit={save} className="flex flex-col gap-3">
-            <label>Name<input required value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Mumbai IPL 2027 season" /></label>
-            <label>City<input required value={f.city} onChange={(e) => setF({ ...f, city: e.target.value })} /></label>
-            <div className="grid grid-cols-2 gap-3">
-              <label>Starts<input required type="date" value={f.starts_on} onChange={(e) => setF({ ...f, starts_on: e.target.value })} /></label>
-              <label>Ends<input required type="date" value={f.ends_on} onChange={(e) => setF({ ...f, ends_on: e.target.value })} /></label>
-            </div>
-            <label>Season prize (optional)<input maxLength={160} value={f.prize_text} onChange={(e) => setF({ ...f, prize_text: e.target.value })} placeholder="Top 3 win a ride voucher from [sponsor]" /></label>
-            <label>Prize terms link (https)<input type="url" value={f.prize_terms_url} onChange={(e) => setF({ ...f, prize_terms_url: e.target.value })} /></label>
-            <label>Prize sponsor
-              <select value={f.sponsor_id} onChange={(e) => setF({ ...f, sponsor_id: e.target.value })}>
-                <option value="">None</option>
-                {sponsors.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-              </select>
-            </label>
-            <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              Have a lawyer approve the prize terms before showing a prize. The leaderboard works without one.
-            </p>
-            <button className="btn btn-dark">Save season</button>
-            {s.node}
-          </form>
-        )}
-      </Card>
-      <Card title="City seasons">
-        <p className="mb-3 text-sm text-[#5b6865]">Players in that city see a &quot;City season&quot; tab in Ranks: points from every match at every venue in the city, between these dates.</p>
-        <ul className="flex flex-col gap-2">
-          {rows.map((r) => (
-            <li key={r.id} className={`flex items-center justify-between gap-3 rounded-lg border border-[#eef1ef] px-3 py-2 text-sm ${r.is_active ? "" : "opacity-50"}`}>
-              <span>
-                <span className="block font-semibold">{r.name} · {r.city}</span>
-                <span className="block text-[#5b6865]">{r.starts_on} to {r.ends_on}{r.prize_text ? ` · Prize: ${r.prize_text}` : ""}</span>
-              </span>
-              {isAdmin && (
-                <span className="flex shrink-0 gap-2">
-                  <button className="btn btn-line !py-1" onClick={() => setF({ id: r.id, name: r.name, city: r.city, starts_on: r.starts_on, ends_on: r.ends_on, prize_text: r.prize_text ?? "", prize_terms_url: r.prize_terms_url ?? "", sponsor_id: r.sponsor_id ?? "" })}>Edit</button>
-                  <button className="btn btn-line !py-1" onClick={async () => { await supabase().from("seasons").update({ is_active: !r.is_active }).eq("id", r.id); load(); }}>{r.is_active ? "Hide" : "Show"}</button>
-                </span>
-              )}
-            </li>
-          ))}
-          {rows.length === 0 && <li className="py-4 text-center text-sm text-[#5b6865]">No seasons yet.</li>}
-        </ul>
-      </Card>
     </div>
   );
 }

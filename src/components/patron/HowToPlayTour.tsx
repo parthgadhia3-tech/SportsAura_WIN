@@ -22,52 +22,37 @@ function Phone({ children }: { children: ReactNode }) {
   );
 }
 
-/* 1. Scan the TV QR, get checked in */
-function ScanArt({ reduce }: ArtProps) {
-  const cells = [1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 0, 1, 1, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0];
+/* 1. Play from anywhere: the match is live on your phone */
+function AnywhereArt({ reduce }: ArtProps) {
+  const spots = ["Home", "Office", "Bar", "On the go"];
   return (
-    <div className="relative flex h-[250px] items-center justify-center gap-6">
-      <div className="rounded-xl border-[5px] border-ink/70 bg-black/50 p-3">
-        <div className="grid grid-cols-5 gap-[3px] rounded-md bg-white p-1.5">
-          {cells.map((c, i) => (
-            <span key={i} className={`size-[11px] ${c ? "bg-[#0A0A0A]" : "bg-white"}`} />
-          ))}
-        </div>
-        <p className="mt-2 text-center text-[10px] font-semibold text-ink/70">Bar TV</p>
-      </div>
-      <motion.div
-        initial={reduce ? false : { x: 40, rotate: 8, opacity: 0 }}
-        animate={{ x: 0, rotate: -4, opacity: 1 }}
-        transition={{ duration: 0.7, ease }}
-      >
+    <div className="relative flex h-[250px] items-center justify-center gap-5">
+      <ul className="flex flex-col gap-2">
+        {spots.map((p, n) => (
+          <motion.li
+            key={p}
+            className="rounded-full border border-ink/25 bg-black/30 px-3 py-1 text-xs font-semibold text-ink/80"
+            initial={reduce ? false : { x: -24, opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            transition={{ delay: reduce ? 0 : 0.15 + n * 0.15, duration: 0.5, ease }}
+          >
+            {p}
+          </motion.li>
+        ))}
+      </ul>
+      <motion.div initial={reduce ? false : { y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ duration: 0.7, ease }}>
         <Phone>
-          <div className="relative flex h-[170px] flex-col items-center justify-center rounded-xl bg-surface">
-            {!reduce && (
+          <div className="flex h-[170px] flex-col justify-between rounded-xl bg-brand p-3 text-on-brand">
+            <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider">
               <motion.span
-                className="absolute inset-x-3 h-0.5 rounded bg-brand-2"
-                initial={{ top: 16 }}
-                animate={{ top: [16, 150, 16] }}
-                transition={{ duration: 1.6, repeat: 1, ease: "easeInOut" }}
+                className="size-1.5 rounded-full bg-current"
+                animate={reduce ? undefined : { opacity: [1, 0.2, 1] }}
+                transition={{ duration: 1.2, repeat: Infinity }}
               />
-            )}
-            <motion.div
-              className="flex size-14 items-center justify-center rounded-full bg-brand text-on-brand"
-              initial={reduce ? false : { scale: 0 }}
-              animate={{ scale: 1 }}
-              transition={{ delay: reduce ? 0 : 3.3, type: "spring", stiffness: 300, damping: 15 }}
-            >
-              <svg viewBox="0 0 24 24" className="size-8" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                <path d="m5 12 5 5 9-10" />
-              </svg>
-            </motion.div>
-            <motion.p
-              className="mt-3 font-display text-lg font-bold"
-              initial={reduce ? false : { opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: reduce ? 0 : 3.5 }}
-            >
-              You&apos;re in
-            </motion.p>
+              Live now
+            </span>
+            <span className="font-display text-xl font-bold leading-tight">IND vs WI</span>
+            <span className="rounded-lg bg-black/25 py-1.5 text-center text-[11px] font-bold">Play</span>
           </div>
         </Phone>
       </motion.div>
@@ -194,32 +179,36 @@ function ScoreArt({ reduce }: ArtProps) {
   );
 }
 
-/* 4. Rewards drop into your wallet */
-function RewardArt({ reduce }: ArtProps) {
+/* 4. A leaderboard for just your group */
+function GroupArt({ reduce }: ArtProps) {
+  const rows = [
+    ["1", "Riya", "80"],
+    ["2", "You", "70"],
+    ["3", "Kabir", "50"],
+  ];
   return (
     <div className="flex h-[250px] items-center justify-center">
       <Phone>
-        <p className="mb-2 px-1 font-display text-sm font-bold">Rewards</p>
-        <motion.div
-          className="overflow-hidden rounded-xl bg-ink text-[color:var(--brand-surface)]"
-          initial={reduce ? false : { y: -120, rotate: -6, opacity: 0 }}
-          animate={{ y: 0, rotate: 0, opacity: 1 }}
-          transition={{ delay: reduce ? 0 : 0.3, type: "spring", stiffness: 160, damping: 14 }}
-        >
-          <div className="bg-brand px-2.5 py-1.5 text-[10px] font-bold text-on-brand">Your bar</div>
-          <div className="px-2.5 py-2">
-            <p className="font-display text-[15px] font-bold leading-tight">20% off your food bill</p>
-            <p className="tabular mt-1.5 rounded border border-dashed border-current/40 py-1 text-center font-display text-xs font-bold tracking-widest">
-              MD-7F3A
-            </p>
-          </div>
-        </motion.div>
-        <motion.div
-          className="mt-2 h-10 rounded-xl bg-surface/70"
-          initial={reduce ? false : { opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: reduce ? 0 : 0.9 }}
-        />
+        <div className="mb-2 flex gap-1">
+          <span className="rounded-full border border-ink/30 px-2 py-0.5 text-[9px] font-semibold text-ink/70">Everyone</span>
+          <span className="rounded-full bg-brand px-2 py-0.5 text-[9px] font-bold text-on-brand">Office gang</span>
+        </div>
+        <ol className="flex flex-col gap-1.5">
+          {rows.map(([r, n, p], k) => (
+            <motion.li
+              key={n}
+              className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-[11px] font-semibold ${n === "You" ? "bg-brand text-on-brand" : "bg-surface/80"}`}
+              initial={reduce ? false : { x: 30, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              transition={{ delay: reduce ? 0 : 0.2 + k * 0.15, duration: 0.45, ease }}
+            >
+              <span className="w-3 font-display">{r}</span>
+              <span className="flex-1">{n}</span>
+              <span className="tabular font-display">{p}</span>
+            </motion.li>
+          ))}
+        </ol>
+        <p className="mt-2 rounded-lg border border-dashed border-ink/30 py-1 text-center text-[10px] font-bold tracking-widest text-ink/70">CODE K7M2QX</p>
       </Phone>
     </div>
   );
@@ -227,24 +216,24 @@ function RewardArt({ reduce }: ArtProps) {
 
 const STEPS: Step[] = [
   {
-    title: "Check in once",
-    body: "Scan the QR on the bar's TV. You're in for the whole match, no typing.",
-    Art: ScanArt,
+    title: "Play from anywhere",
+    body: "When a match is live, open Live. Home, office or out with friends: no check-in, no codes.",
+    Art: AnywhereArt,
   },
   {
-    title: "Predict the moment",
-    body: "A question pops up during play. Tap your answer before the timer runs out.",
+    title: "Call the next play",
+    body: "A question pops up during the match. Tap your answer before the timer runs out.",
     Art: PredictArt,
   },
   {
-    title: "Score and climb",
-    body: "Every right call adds points and moves you up this bar's leaderboard.",
+    title: "10 points a right call",
+    body: "Every right answer is worth 10 points. Climb the match and series leaderboards.",
     Art: ScoreArt,
   },
   {
-    title: "Win rewards",
-    body: "Some questions carry a reward. The fastest right answers win it, straight into Rewards.",
-    Art: RewardArt,
+    title: "Bring your group",
+    body: "Make a group, share the code, and get a leaderboard of just your friends.",
+    Art: GroupArt,
   },
 ];
 

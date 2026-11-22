@@ -16,7 +16,7 @@ const ITEMS: Item[] = [
   {
     href: "/live",
     label: "Live",
-    match: (p) => p.startsWith("/live") || p.startsWith("/v/"),
+    match: (p) => p.startsWith("/live"),
     icon: (
       <>
         <rect x="3" y="5" width="18" height="12" rx="2" />
@@ -37,20 +37,9 @@ const ITEMS: Item[] = [
     ),
   },
   {
-    href: "/wallet",
-    label: "Rewards",
-    match: (p) => p.startsWith("/wallet"),
-    icon: (
-      <>
-        <rect x="3.5" y="9" width="17" height="11" rx="1.5" />
-        <path d="M2.5 9h19M12 9v11M12 9c-1.5-3-5.5-4-5.5-1.5S10 9 12 9Zm0 0c1.5-3 5.5-4 5.5-1.5S14 9 12 9Z" />
-      </>
-    ),
-  },
-  {
     href: "/me",
     label: "Me",
-    match: (p) => p.startsWith("/me"),
+    match: (p) => p.startsWith("/me") || p.startsWith("/g/"),
     icon: (
       <>
         <circle cx="12" cy="8.5" r="3.5" />
@@ -61,8 +50,8 @@ const ITEMS: Item[] = [
 ];
 
 /**
- * The one bottom bar for the player app: Home, Live (bar game), Rooms,
- * Rewards, Me. The active tab shows its label; the rest are icons only.
+ * The one bottom bar for the player app: Home, Live (match predictions),
+ * Rooms (trivia), Me. The active tab shows its label; the rest are icons only.
  */
 export function AppNav() {
   const path = usePathname() ?? "/";
@@ -71,7 +60,7 @@ export function AppNav() {
       aria-label="Main"
       className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-md border-t border-ink/10 bg-[#071618]/85 px-3 pb-[max(.6rem,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl"
     >
-      <ul className="grid grid-cols-5">
+      <ul className="grid grid-cols-4">
         {ITEMS.map((it) => {
           const on = it.match(path);
           return (
@@ -103,6 +92,3 @@ export function AppNav() {
     </nav>
   );
 }
-
-/** Remember the last bar the player opened, so Live can take them back. */
-export const LAST_VENUE_KEY = "sa-last-venue";

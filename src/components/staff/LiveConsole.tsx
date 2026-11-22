@@ -2,8 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { friendlyError } from "@/lib/copy";
-import { fillTemplate, type Bucket, type Match, type Question, type QuestionTemplate, type Sponsor, type Venue } from "@/lib/types";
+import { POINTS_PER_ANSWER, friendlyError } from "@/lib/copy";
+import { fillTemplate, type Match, type Question, type QuestionTemplate, type Sponsor } from "@/lib/types";
 
 const PRESETS: Record<string, { label: string; options: string[] }[]> = {
   cricket: [
@@ -44,8 +44,6 @@ export function LiveConsole({ fixedMatchId }: { fixedMatchId?: string } = {}) {
     if (fixedMatchId) setMatchId(fixedMatchId);
   }, [fixedMatchId]);
   const [questions, setQuestions] = useState<Question[]>([]);
-  const [buckets, setBuckets] = useState<Bucket[]>([]);
-  const [venues, setVenues] = useState<Venue[]>([]);
   const [sponsors, setSponsors] = useState<Sponsor[]>([]);
   const [templates, setTemplates] = useState<QuestionTemplate[]>([]);
   const [counts, setCounts] = useState<Counts>({});
@@ -57,10 +55,7 @@ export function LiveConsole({ fixedMatchId }: { fixedMatchId?: string } = {}) {
   // draft form
   const [prompt, setPrompt] = useState("");
   const [options, setOptions] = useState<string[]>(["Yes", "No"]);
-  const [points, setPoints] = useState(10);
   const [windowS, setWindowS] = useState(30);
-  const [bucketId, setBucketId] = useState("");
-  const [venueScope, setVenueScope] = useState("");
   const [formSponsor, setFormSponsor] = useState("");
 
   // quick mode
@@ -81,41 +76,16 @@ export function LiveConsole({ fixedMatchId }: { fixedMatchId?: string } = {}) {
 
   const match = matches.find((m) => m.id === matchId);
   const sport = match?.sport === "football" ? "football" : "cricket";
-  const [rewardSet, setRewardSet] = useState<{ code: string } | null>(null);
-  const [stock, setStock] = useState<{ total_left: number; unlimited: boolean } | null>(null);
-  const setIdForMatch = match?.reward_set_id ?? null;
-
-  useEffect(() => {
-    if (!setIdForMatch) {
-      setRewardSet(null);
-      setStock(null);
-      return;
-    }
-    const sb = supabase();
-    const load = () => {
-      sb.from("reward_sets").select("code").eq("id", setIdForMatch).maybeSingle().then(({ data }) => setRewardSet(data));
-      sb.rpc("reward_set_stock", { p_set: setIdForMatch }).then(({ data }) =>
-        setStock(((data as { total_left: number; unlimited: boolean }[]) ?? [])[0] ?? null),
-      );
-    };
-    load();
-    const t = setInterval(load, 10000);
-    return () => clearInterval(t);
-  }, [setIdForMatch]);
 
   const loadMeta = useCallback(async () => {
     const sb = supabase();
-    const [{ data: ms }, { data: bs }, { data: vs }, { data: sp }, { data: tp }] = await Promise.all([
+    const [{ data: ms }, { data: sp }, { data: tp }] = await Promise.all([
       sb.from("matches").select("*").neq("status", "ended").not("published_at", "is", null).order("starts_at"),
-      sb.from("coupon_buckets").select("*").eq("is_active", true).order("created_at", { ascending: false }),
-      sb.from("venues").select("id, name, slug").eq("is_active", true).order("name"),
       sb.from("sponsors").select("*").eq("is_active", true).order("name"),
       sb.from("question_templates").select("*").eq("is_active", true).order("pack").order("sort_order"),
     ]);
     const list = (ms as Match[]) ?? [];
     setMatches(list);
-    setBuckets((bs as Bucket[]) ?? []);
-    setVenues((vs as Venue[]) ?? []);
     setSponsors((sp as Sponsor[]) ?? []);
     setTemplates((tp as QuestionTemplate[]) ?? []);
     setMatchId((cur) => cur || list.find((m) => m.status === "live")?.id || list[0]?.id || "");
@@ -200,13 +170,13 @@ export function LiveConsole({ fixedMatchId }: { fixedMatchId?: string } = {}) {
   }
 
   async function createAndMaybePush(
-    q: { prompt: string; options: string[]; points: number; answer_window_s: number; coupon_bucket_id?: string | null; venue_id?: string | null; sponsor_id?: string | null },
+    q: { prompt: string; options: string[]; answer_window_s: number; sponsor_id?: string | null },
     pushNow: boolean,
   ) {
     const { data: user } = await supabase().auth.getUser();
     const { data, error } = await supabase()
       .from("questions")
-      .insert({ match_id: matchId, created_by: user.user?.id, ...q })
+      .insert({ match_id: matchId, created_by: user.user?.id, points: POINTS_PER_ANSWER, ...q })
       .select("id")
       .single();
     if (error) {
@@ -229,10 +199,7 @@ export function LiveConsole({ fixedMatchId }: { fixedMatchId?: string } = {}) {
       {
         prompt: fillTemplate(prompt.trim(), match.title, over),
         options: clean,
-        points,
         answer_window_s: windowS,
-        coupon_bucket_id: bucketId || null,
-        venue_id: venueScope || null,
         sponsor_id: formSponsor || null,
       },
       pushNow,
@@ -247,7 +214,6 @@ export function LiveConsole({ fixedMatchId }: { fixedMatchId?: string } = {}) {
       {
         prompt: fillTemplate(t.prompt, match.title, over),
         options: t.options.map((o) => fillTemplate(o, match.title, over)),
-        points: t.points,
         answer_window_s: t.answer_window_s,
         sponsor_id: quickSponsor || null,
       },
@@ -278,7 +244,6 @@ export function LiveConsole({ fixedMatchId }: { fixedMatchId?: string } = {}) {
   const live = questions.filter((q) => q.status === "live" || q.status === "locked");
   const drafts = questions.filter((q) => q.status === "draft");
   const done = questions.filter((q) => q.status === "resolved" || q.status === "void");
-  const bucketName = useMemo(() => Object.fromEntries(buckets.map((b) => [b.id, b])), [buckets]);
   const sponsorName = useMemo(() => Object.fromEntries(sponsors.map((s) => [s.id, s.name])), [sponsors]);
   const next = packItems.length ? packItems[nextIdx % packItems.length] : null;
   const isLive = match?.status === "live";
@@ -322,7 +287,7 @@ export function LiveConsole({ fixedMatchId }: { fixedMatchId?: string } = {}) {
           {match && (
             <>
               <label className="mt-3">
-                Presented by (shown on phones and the TV all match)
+                Presented by (shown on phones all match)
                 <select value={match.sponsor_id ?? ""} onChange={(e) => updateMatch({ sponsor_id: e.target.value || null }, "Match sponsor saved.")}>
                   <option value="">No match sponsor</option>
                   {sponsors.map((s) => (
@@ -332,7 +297,7 @@ export function LiveConsole({ fixedMatchId }: { fixedMatchId?: string } = {}) {
               </label>
               <div className="mt-3 flex gap-2">
                 {!isLive ? (
-                  <button className="btn btn-go" onClick={() => updateMatch({ status: "live" }, "Match is live. Players can check in.")}>Start match</button>
+                  <button className="btn btn-go" onClick={() => updateMatch({ status: "live" }, "Match is live. Players can join from anywhere.")}>Start match</button>
                 ) : (
                   <button className="btn btn-line" onClick={() => confirm("End this match? Players can no longer answer.") && updateMatch({ status: "ended" }, "Match ended.")}>
                     End match
@@ -381,48 +346,21 @@ export function LiveConsole({ fixedMatchId }: { fixedMatchId?: string } = {}) {
             )}
             <p className="text-xs text-[#5b6865]">Tip: {"{home}"} and {"{away}"} become the team names, {"{over}"} the current over.</p>
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <label>
-              Points
-              <input type="number" min={1} max={1000} value={points} onChange={(e) => setPoints(Number(e.target.value))} />
-            </label>
-            <label>
-              Answer window
-              <select value={windowS} onChange={(e) => setWindowS(Number(e.target.value))}>
-                {[15, 20, 30, 45, 60, 90, 120].map((s) => (
-                  <option key={s} value={s}>{s} seconds</option>
-                ))}
-              </select>
-            </label>
-          </div>
           <label>
-            {match?.reward_set_id ? "Bonus reward (optional, on top of the set)" : "Reward bucket"}
-            <select value={bucketId} onChange={(e) => setBucketId(e.target.value)}>
-              <option value="">{match?.reward_set_id ? "No bonus" : "Points only"}</option>
-              {buckets.filter((b) => !b.set_id).map((b) => (
-                <option key={b.id} value={b.id}>
-                  {b.brand_name}: {b.title}
-                  {b.min_age === 25 ? " (25+ spirits)" : b.is_alcohol ? " (21+ beer/wine)" : ""}
-                  {b.total_quantity ? ` [${Math.max(b.total_quantity - b.issued_count, 0)} left]` : ""}
-                </option>
+            Answer window
+            <select value={windowS} onChange={(e) => setWindowS(Number(e.target.value))}>
+              {[15, 20, 30, 45, 60, 90, 120].map((s) => (
+                <option key={s} value={s}>{s} seconds</option>
               ))}
             </select>
           </label>
+          <p className="text-xs text-[#5b6865]">Every question is worth {POINTS_PER_ANSWER} points for a right answer.</p>
           <label>
             Sponsor for this question
             <select value={formSponsor} onChange={(e) => setFormSponsor(e.target.value)}>
               <option value="">{match?.sponsor_id ? `Match sponsor (${sponsorName[match.sponsor_id] ?? ""})` : "None"}</option>
               {sponsors.map((s) => (
                 <option key={s.id} value={s.id}>{s.name}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Send to
-            <select value={venueScope} onChange={(e) => setVenueScope(e.target.value)}>
-              <option value="">All venues</option>
-              {venues.map((v) => (
-                <option key={v.id} value={v.id}>{v.name} only</option>
               ))}
             </select>
           </label>
@@ -495,7 +433,7 @@ export function LiveConsole({ fixedMatchId }: { fixedMatchId?: string } = {}) {
                   <p className="text-xs font-semibold uppercase tracking-wide text-[#5b6865]">Next up</p>
                   <p className="truncate text-lg font-bold">{fillTemplate(next.prompt, match.title, over)}</p>
                   <p className="truncate text-sm text-[#5b6865]">
-                    {next.options.map((o) => fillTemplate(o, match.title, over)).join(" / ")} · {next.points} pts · {next.answer_window_s}s
+                    {next.options.map((o) => fillTemplate(o, match.title, over)).join(" / ")} · {next.answer_window_s}s
                   </p>
                 </div>
                 <button className="btn btn-go !px-6 !py-3 text-base" disabled={!isLive || busy || live.length > 0} onClick={() => pushTemplate(next, nextIdx % packItems.length)}>
@@ -506,7 +444,7 @@ export function LiveConsole({ fixedMatchId }: { fixedMatchId?: string } = {}) {
                 </button>
               </div>
             ) : (
-              <p className="mt-3 text-sm text-[#5b6865]">No packs for {sport} yet. Add some in the Packs tab.</p>
+              <p className="mt-3 text-sm text-[#5b6865]">No packs for {sport} yet. Add some in Common functions › Question packs.</p>
             )}
             {live.length > 0 && next && <p className="mt-2 text-xs text-[#5b6865]">Settle the live question first, or turn on auto-push below.</p>}
 
@@ -593,12 +531,6 @@ export function LiveConsole({ fixedMatchId }: { fixedMatchId?: string } = {}) {
         )}
 
         <div>
-          {match?.reward_set_id && (
-            <p className="mb-3 rounded-lg bg-emerald-50 px-4 py-2 text-sm text-emerald-900">
-              Reward set {rewardSet?.code ?? ""} is on for this match: every right answer automatically wins a coupon from it.
-              {stock && !stock.unlimited ? ` ${stock.total_left} coupons left.` : ""}
-            </p>
-          )}
           <h2 className="mb-2 text-lg font-bold">On phones now</h2>
           {live.length === 0 && <p className="rounded-xl border border-dashed border-[#c9d0cd] p-6 text-center text-[#5b6865]">Nothing live. Push a question to start.</p>}
           <div className="flex flex-col gap-3">
@@ -614,7 +546,6 @@ export function LiveConsole({ fixedMatchId }: { fixedMatchId?: string } = {}) {
                     <div>
                       <p className="text-xs font-semibold text-[#0f7a5c]">
                         {closed ? "Closed, waiting for result" : `Open, ${left}s left`} · {total} answers
-                        {q.coupon_bucket_id && bucketName[q.coupon_bucket_id] ? ` · Reward: ${bucketName[q.coupon_bucket_id].title}` : ""}
                         {sid && sponsorName[sid] ? ` · Sponsor: ${sponsorName[sid]}` : ""}
                       </p>
                       <h3 className="mt-1 text-xl font-bold">{q.prompt}</h3>
@@ -647,7 +578,7 @@ export function LiveConsole({ fixedMatchId }: { fixedMatchId?: string } = {}) {
                   </div>
                   <button
                     className="mt-3 text-sm font-semibold text-red-700 underline"
-                    onClick={() => confirm("Void this question? No points will be given, and anyone who used their double gets it back.") && run(() => supabase().rpc("void_question", { p_question_id: q.id }), "Voided.")}
+                    onClick={() => confirm("Void this question? Nobody gets points for it.") && run(() => supabase().rpc("void_question", { p_question_id: q.id }), "Voided.")}
                   >
                     Void (can&apos;t be settled)
                   </button>
@@ -666,8 +597,7 @@ export function LiveConsole({ fixedMatchId }: { fixedMatchId?: string } = {}) {
                 <div className="min-w-0">
                   <p className="truncate font-semibold">{q.prompt}</p>
                   <p className="truncate text-xs text-[#5b6865]">
-                    {q.options.join(" / ")} · {q.points} pts · {q.answer_window_s}s
-                    {q.coupon_bucket_id && bucketName[q.coupon_bucket_id] ? ` · ${bucketName[q.coupon_bucket_id].title}` : ""}
+                    {q.options.join(" / ")} · {q.answer_window_s}s
                   </p>
                 </div>
                 <div className="flex shrink-0 gap-2">

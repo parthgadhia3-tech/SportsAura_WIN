@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { ErrorNote, Field, GhostButton, PrimaryButton, inputClass } from "./ui";
 import { LegalLinks } from "@/components/LegalLinks";
 
-export function PhoneLogin({ venueName, heading, intro }: { venueName?: string; heading?: string; intro?: string }) {
+export function PhoneLogin({ heading, intro }: { heading?: string; intro?: string }) {
   const [phone, setPhone] = useState("");
   const [otp, setOtp] = useState("");
   const [sent, setSent] = useState(false);
@@ -27,7 +27,10 @@ export function PhoneLogin({ venueName, heading, intro }: { venueName?: string; 
     setError("");
     const { error } = await supabase().auth.signInWithOtp({ phone: e164 });
     setBusy(false);
-    if (error) return setError(error.message);
+    if (error) {
+      // SMS provider problems are ours, not the player's: keep the message plain.
+      return setError(/provider|sms|twilio/i.test(error.message) ? "We couldn't send the code right now. Please try again in a few minutes." : error.message);
+    }
     setSent(true);
     setCooldown(30);
   }
@@ -43,12 +46,11 @@ export function PhoneLogin({ venueName, heading, intro }: { venueName?: string; 
   return (
     <div className="mx-auto flex min-h-dvh max-w-md flex-col justify-end gap-8 px-6 pb-10 pt-16">
       <div>
-        {venueName && <p className="text-lg text-ink/70">You&apos;re at {venueName}</p>}
         <h1 className="mt-1 font-display text-5xl font-bold leading-[0.95]">
-          {heading ?? "Call the next play. Win the room."}
+          {heading ?? "Call the next play."}
         </h1>
         <p className="mt-4 text-[17px] text-ink/75">
-          {intro ?? "Free live predictions during the match. Score points, climb the bar's leaderboard and win rewards."}
+          {intro ?? "Free live predictions during the match, from anywhere. 10 points for every right call. Play with your friends' group or against everyone."}
         </p>
       </div>
 

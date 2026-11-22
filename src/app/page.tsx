@@ -12,10 +12,8 @@ export default function Home() {
           <p className="font-display text-3xl font-bold text-brand">{APP_NAME}</p>
           <HomeHub />
           <LegalLinks className="mt-10 !justify-start" />
-          <nav className="mt-4 flex gap-5 text-sm text-ink/55" aria-label="Staff">
-            <Link href="/venue" className="underline">Venue dashboard</Link>
+          <nav className="mt-4 text-sm text-ink/45" aria-label="Staff">
             <Link href="/admin" className="underline">Game Master</Link>
-            <Link href="/partner" className="ml-auto font-semibold text-ink/80 underline">Own a bar?</Link>
           </nav>
         </div>
       </main>
